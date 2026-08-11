@@ -1,0 +1,3454 @@
+{
+  "version": "2.14",
+  "children": [
+    {
+      "type": "frame",
+      "id": "LMUoR",
+      "x": 0,
+      "y": 0,
+      "name": "Button Primary",
+      "reusable": true,
+      "fill": "$accent",
+      "cornerRadius": 9999,
+      "gap": 8,
+      "padding": [
+        12,
+        24
+      ],
+      "justifyContent": "center",
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "text",
+          "id": "EjHkh",
+          "name": "Label",
+          "fill": "$text-inverse",
+          "content": "Continuar",
+          "fontFamily": "$font-main",
+          "fontSize": 16,
+          "fontWeight": "600"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "CW3VZ",
+      "x": 145,
+      "y": 0,
+      "name": "Button Secondary",
+      "reusable": true,
+      "fill": "#FFFFFF",
+      "cornerRadius": 9999,
+      "stroke": "$border",
+      "strokeWidth": 1.5,
+      "gap": 8,
+      "padding": [
+        12,
+        24
+      ],
+      "justifyContent": "center",
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "text",
+          "id": "qAVB5",
+          "name": "Label",
+          "fill": "$text-primary",
+          "content": "Omitir",
+          "fontFamily": "$font-main",
+          "fontSize": 16,
+          "fontWeight": "500"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "pCJtv",
+      "x": 260,
+      "y": 0,
+      "name": "Button Text",
+      "reusable": true,
+      "gap": 8,
+      "padding": [
+        12,
+        24
+      ],
+      "justifyContent": "center",
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "text",
+          "id": "KziLa",
+          "name": "Label",
+          "fill": "$accent-dark",
+          "content": "Volver",
+          "fontFamily": "$font-main",
+          "fontSize": 14,
+          "fontWeight": "500"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "D0WfT",
+      "x": 371,
+      "y": 0,
+      "name": "Text Input",
+      "reusable": true,
+      "width": 400,
+      "layout": "vertical",
+      "gap": 6,
+      "children": [
+        {
+          "type": "text",
+          "id": "t76iD",
+          "name": "Input Label",
+          "fill": "$text-secondary",
+          "content": "Nombre",
+          "fontFamily": "$font-main",
+          "fontSize": 13,
+          "fontWeight": "500"
+        },
+        {
+          "type": "frame",
+          "id": "KWkKl",
+          "name": "Field",
+          "width": "fill_container",
+          "fill": "#FFFFFF",
+          "cornerRadius": 12,
+          "stroke": "$border",
+          "strokeWidth": 1,
+          "padding": [
+            12,
+            16
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "P3xyP",
+              "name": "Placeholder",
+              "fill": "$text-muted",
+              "content": "Escribe aquí...",
+              "fontFamily": "$font-main",
+              "fontSize": 15,
+              "fontWeight": "normal"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "cYldM",
+      "x": 791,
+      "y": 0,
+      "name": "AI Message",
+      "reusable": true,
+      "width": 400,
+      "gap": 12,
+      "children": [
+        {
+          "type": "frame",
+          "id": "W8lX2y",
+          "name": "Avatar",
+          "width": 36,
+          "height": 36,
+          "fill": "$accent-light",
+          "cornerRadius": 9999,
+          "justifyContent": "center",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "EOIJl",
+              "name": "AI Icon",
+              "fill": "$accent-dark",
+              "content": "IA",
+              "fontFamily": "$font-main",
+              "fontSize": 14,
+              "fontWeight": "700"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "wCgp5",
+          "name": "Bubble",
+          "width": "fill_container",
+          "fill": "$ai-bubble",
+          "cornerRadius": [
+            4,
+            16,
+            16,
+            16
+          ],
+          "layout": "vertical",
+          "gap": 8,
+          "padding": [
+            14,
+            18
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "RdkeK",
+              "name": "Message Text",
+              "fill": "$text-primary",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "¿En qué tipo de trabajo estás interesado?",
+              "lineHeight": 1.5,
+              "fontFamily": "$font-main",
+              "fontSize": 15,
+              "fontWeight": "normal"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "WjneE",
+      "x": 1211,
+      "y": 0,
+      "name": "Select Option",
+      "reusable": true,
+      "width": 400,
+      "fill": "#FFFFFF",
+      "cornerRadius": 12,
+      "stroke": "$border",
+      "strokeWidth": 1.5,
+      "gap": 12,
+      "padding": [
+        14,
+        18
+      ],
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "frame",
+          "id": "Rxroy",
+          "name": "Radio",
+          "width": 20,
+          "height": 20,
+          "cornerRadius": 9999,
+          "stroke": "$border",
+          "strokeWidth": 2
+        },
+        {
+          "type": "text",
+          "id": "W9WD99",
+          "name": "Option Text",
+          "fill": "$text-primary",
+          "textGrowth": "fixed-width",
+          "width": "fill_container",
+          "content": "Encontrar mi primer empleo",
+          "fontFamily": "$font-main",
+          "fontSize": 15,
+          "fontWeight": "normal"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "qEHnY",
+      "x": 0,
+      "y": 83,
+      "name": "Progress Bar",
+      "reusable": true,
+      "width": 400,
+      "layout": "vertical",
+      "gap": 8,
+      "children": [
+        {
+          "type": "frame",
+          "id": "TRatA",
+          "name": "Progress Label Row",
+          "width": "fill_container",
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "lceQV",
+              "name": "Step Label",
+              "fill": "$text-secondary",
+              "content": "Paso 3 de 8",
+              "fontFamily": "$font-main",
+              "fontSize": 12,
+              "fontWeight": "500"
+            },
+            {
+              "type": "text",
+              "id": "PY55i",
+              "name": "Percent",
+              "fill": "$accent-dark",
+              "content": "37%",
+              "fontFamily": "$font-main",
+              "fontSize": 12,
+              "fontWeight": "600"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "HIPsg",
+          "name": "Track",
+          "width": "fill_container",
+          "height": 6,
+          "fill": "#E5E7EB",
+          "cornerRadius": 9999,
+          "children": [
+            {
+              "type": "rectangle",
+              "cornerRadius": 9999,
+              "id": "TIglB",
+              "name": "Fill",
+              "fill": "$accent",
+              "width": 148,
+              "height": 6
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "crWZK",
+      "x": 420,
+      "y": 83,
+      "name": "Suggestion Chip",
+      "reusable": true,
+      "fill": "$accent-light",
+      "cornerRadius": 9999,
+      "stroke": "$accent",
+      "strokeWidth": 1,
+      "gap": 8,
+      "padding": [
+        10,
+        16
+      ],
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "text",
+          "id": "WB0VR",
+          "name": "Check Icon",
+          "fill": "$accent-dark",
+          "content": "✓",
+          "fontFamily": "$font-main",
+          "fontSize": 14,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "text",
+          "id": "VkJp8",
+          "name": "Chip Label",
+          "fill": "$accent-dark",
+          "content": "Atención al cliente",
+          "fontFamily": "$font-main",
+          "fontSize": 14,
+          "fontWeight": "500"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "l5TWA",
+      "x": 616,
+      "y": 83,
+      "name": "App Header",
+      "reusable": true,
+      "width": 400,
+      "height": 56,
+      "fill": "#FFFFFF",
+      "padding": [
+        0,
+        20
+      ],
+      "justifyContent": "space_between",
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "text",
+          "id": "c2d0d",
+          "name": "Logo",
+          "fill": "$text-primary",
+          "content": "Mi CV con IA",
+          "fontFamily": "$font-main",
+          "fontSize": 18,
+          "fontWeight": "700"
+        },
+        {
+          "type": "frame",
+          "id": "Fo5wz",
+          "name": "Right Actions",
+          "gap": 16,
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "dSbiP",
+              "name": "Save Status",
+              "fill": "$text-muted",
+              "content": "✓ Guardado",
+              "fontFamily": "$font-main",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "G27KF",
+              "name": "Help",
+              "fill": "$text-secondary",
+              "content": "Ayuda",
+              "fontFamily": "$font-main",
+              "fontSize": 14,
+              "fontWeight": "500"
+            },
+            {
+              "type": "text",
+              "id": "ChBLi",
+              "name": "Exit",
+              "fill": "$text-secondary",
+              "content": "Salir",
+              "fontFamily": "$font-main",
+              "fontSize": 14,
+              "fontWeight": "500"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "u2hh4x",
+      "x": 0,
+      "y": 212,
+      "name": "Screen 1 - Landing Page",
+      "clip": true,
+      "width": 1440,
+      "height": 900,
+      "fill": "$bg-primary",
+      "layout": "vertical"
+    },
+    {
+      "type": "frame",
+      "id": "aFkRv",
+      "x": 1500,
+      "y": 212,
+      "name": "Screen 2 - Career Objective",
+      "clip": true,
+      "width": 420,
+      "height": 900,
+      "fill": "$bg-primary",
+      "layout": "vertical"
+    },
+    {
+      "type": "frame",
+      "id": "WFmZr",
+      "x": 1980,
+      "y": 212,
+      "name": "Screen 3 - Personal Info",
+      "clip": true,
+      "width": 420,
+      "height": 900,
+      "fill": "$bg-primary",
+      "layout": "vertical"
+    },
+    {
+      "type": "frame",
+      "id": "ku2f2",
+      "x": 2460,
+      "y": 212,
+      "name": "Screen 5 - Education",
+      "clip": true,
+      "width": 420,
+      "height": 900,
+      "fill": "$bg-primary",
+      "layout": "vertical"
+    },
+    {
+      "type": "frame",
+      "id": "G46Jx",
+      "x": 2940,
+      "y": 212,
+      "name": "Screen 7 - Experience Entry",
+      "clip": true,
+      "width": 420,
+      "height": 900,
+      "fill": "$bg-primary",
+      "layout": "vertical"
+    },
+    {
+      "type": "frame",
+      "id": "c4hxtc",
+      "x": 3420,
+      "y": 212,
+      "name": "Screen 10 - AI Skills",
+      "clip": true,
+      "width": 420,
+      "height": 900,
+      "fill": "$bg-primary",
+      "layout": "vertical",
+      "children": [
+        {
+          "id": "P7DrE3",
+          "type": "ref",
+          "ref": "l5TWA",
+          "name": "Header",
+          "width": "fill_container"
+        },
+        {
+          "id": "GK9MR",
+          "type": "ref",
+          "ref": "qEHnY",
+          "name": "Progress",
+          "width": "fill_container",
+          "padding": [
+            0,
+            20
+          ],
+          "descendants": {
+            "lceQV": {
+              "content": "Paso 6 de 8"
+            },
+            "PY55i": {
+              "content": "75%"
+            },
+            "TIglB": {
+              "width": 300
+            }
+          }
+        },
+        {
+          "type": "frame",
+          "id": "i3lC9",
+          "name": "Content",
+          "width": "fill_container",
+          "height": "fill_container",
+          "layout": "vertical",
+          "gap": 20,
+          "padding": [
+            16,
+            20,
+            20,
+            20
+          ],
+          "children": [
+            {
+              "id": "z3ANFI",
+              "type": "ref",
+              "ref": "cYldM",
+              "name": "AI Intro",
+              "width": "fill_container",
+              "descendants": {
+                "RdkeK": {
+                  "content": "Basándonos en lo que nos contaste, creemos que podrías tener estas habilidades. Confirma solo las que realmente te representan."
+                }
+              }
+            },
+            {
+              "type": "text",
+              "id": "l15MdJ",
+              "name": "Section Title",
+              "fill": "$text-primary",
+              "content": "Habilidades técnicas",
+              "fontFamily": "$font-main",
+              "fontSize": 16,
+              "fontWeight": "600"
+            },
+            {
+              "type": "frame",
+              "id": "YFNXI",
+              "name": "Skills Grid",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 10,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "lPh4Y",
+                  "name": "Skill Atención al cliente",
+                  "width": "fill_container",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 12,
+                  "stroke": "$border",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 6,
+                  "padding": [
+                    14,
+                    16
+                  ],
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "sTsfA",
+                      "name": "Skill Top",
+                      "width": "fill_container",
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "j0Ss5M",
+                          "name": "Skill Name",
+                          "fill": "$text-primary",
+                          "content": "Atención al cliente",
+                          "fontFamily": "$font-main",
+                          "fontSize": 15,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "LjnhY",
+                          "name": "Actions",
+                          "gap": 12,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "dquNm",
+                              "name": "Confirm",
+                              "fill": "$accent-dark",
+                              "content": "Confirmar",
+                              "fontFamily": "$font-main",
+                              "fontSize": 13,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "obUXD",
+                              "name": "Remove",
+                              "fill": "$text-muted",
+                              "content": "No incluir",
+                              "fontFamily": "$font-main",
+                              "fontSize": 13,
+                              "fontWeight": "500"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "W1BxV",
+                      "name": "Reason",
+                      "fill": "$text-muted",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Sugerida porque mencionaste que hablabas con clientes",
+                      "fontFamily": "$font-main",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "o0wI2l",
+                  "name": "Skill Organización de horarios",
+                  "width": "fill_container",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 12,
+                  "stroke": "$border",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 6,
+                  "padding": [
+                    14,
+                    16
+                  ],
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "D7i1YP",
+                      "name": "Skill Top",
+                      "width": "fill_container",
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Z9o1I",
+                          "name": "Skill Name",
+                          "fill": "$text-primary",
+                          "content": "Organización de horarios",
+                          "fontFamily": "$font-main",
+                          "fontSize": 15,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "u0PO8",
+                          "name": "Actions",
+                          "gap": 12,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "UO9l4",
+                              "name": "Confirm",
+                              "fill": "$accent-dark",
+                              "content": "Confirmar",
+                              "fontFamily": "$font-main",
+                              "fontSize": 13,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "neW3B",
+                              "name": "Remove",
+                              "fill": "$text-muted",
+                              "content": "No incluir",
+                              "fontFamily": "$font-main",
+                              "fontSize": 13,
+                              "fontWeight": "500"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "BNZrz",
+                      "name": "Reason",
+                      "fill": "$text-muted",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Sugerida porque coordinabas citas con clientes",
+                      "fontFamily": "$font-main",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "v4hh3",
+                  "name": "Skill Manejo de inventario",
+                  "width": "fill_container",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 12,
+                  "stroke": "$border",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 6,
+                  "padding": [
+                    14,
+                    16
+                  ],
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "n34pTZ",
+                      "name": "Skill Top",
+                      "width": "fill_container",
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "z3ely",
+                          "name": "Skill Name",
+                          "fill": "$text-primary",
+                          "content": "Manejo de inventario",
+                          "fontFamily": "$font-main",
+                          "fontSize": 15,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "UtuyE",
+                          "name": "Actions",
+                          "gap": 12,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "LZ87j",
+                              "name": "Confirm",
+                              "fill": "$accent-dark",
+                              "content": "Confirmar",
+                              "fontFamily": "$font-main",
+                              "fontSize": 13,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "Y1Cpd",
+                              "name": "Remove",
+                              "fill": "$text-muted",
+                              "content": "No incluir",
+                              "fontFamily": "$font-main",
+                              "fontSize": 13,
+                              "fontWeight": "500"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "kwjO7",
+                      "name": "Reason",
+                      "fill": "$text-muted",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Sugerida porque controlabas productos",
+                      "fontFamily": "$font-main",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "wGbEy",
+                  "name": "Skill Microsoft Excel",
+                  "width": "fill_container",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 12,
+                  "stroke": "$border",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 6,
+                  "padding": [
+                    14,
+                    16
+                  ],
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "P5f5Iv",
+                      "name": "Skill Top",
+                      "width": "fill_container",
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "z5pbw",
+                          "name": "Skill Name",
+                          "fill": "$text-primary",
+                          "content": "Microsoft Excel",
+                          "fontFamily": "$font-main",
+                          "fontSize": 15,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "KMBR2",
+                          "name": "Actions",
+                          "gap": 12,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "dU9Yh",
+                              "name": "Confirm",
+                              "fill": "$accent-dark",
+                              "content": "Confirmar",
+                              "fontFamily": "$font-main",
+                              "fontSize": 13,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "RZM5s",
+                              "name": "Remove",
+                              "fill": "$text-muted",
+                              "content": "No incluir",
+                              "fontFamily": "$font-main",
+                              "fontSize": 13,
+                              "fontWeight": "500"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "k686p",
+                      "name": "Reason",
+                      "fill": "$text-muted",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Sugerida porque usabas hojas de cálculo",
+                      "fontFamily": "$font-main",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "QPCxV",
+              "name": "Section Title 2",
+              "fill": "$text-primary",
+              "content": "Habilidades de comunicación",
+              "fontFamily": "$font-main",
+              "fontSize": 16,
+              "fontWeight": "600"
+            },
+            {
+              "type": "frame",
+              "id": "b09Tu",
+              "name": "Skills Grid 2",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 10,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "Y2jbSL",
+                  "name": "Skill Comunicación verbal",
+                  "width": "fill_container",
+                  "fill": "$accent-light",
+                  "cornerRadius": 12,
+                  "stroke": "$accent",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 6,
+                  "padding": [
+                    14,
+                    16
+                  ],
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "TgnHv",
+                      "name": "Skill Top",
+                      "width": "fill_container",
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "ooNx9",
+                          "name": "Skill Name",
+                          "fill": "$text-primary",
+                          "content": "Comunicación verbal",
+                          "fontFamily": "$font-main",
+                          "fontSize": 15,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "RXg45",
+                          "name": "Confirmed",
+                          "fill": "$accent",
+                          "cornerRadius": 9999,
+                          "padding": [
+                            4,
+                            10
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "I6Nrfb",
+                              "name": "Label",
+                              "fill": "$text-inverse",
+                              "content": "✓ Confirmada",
+                              "fontFamily": "$font-main",
+                              "fontSize": 11,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "NHwxG",
+                      "name": "Reason",
+                      "fill": "$text-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Sugerida porque atendías clientes en persona",
+                      "fontFamily": "$font-main",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "K7mtdx",
+                  "name": "Skill Español e inglés",
+                  "width": "fill_container",
+                  "fill": "$accent-light",
+                  "cornerRadius": 12,
+                  "stroke": "$accent",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 6,
+                  "padding": [
+                    14,
+                    16
+                  ],
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "wMB8N",
+                      "name": "Skill Top",
+                      "width": "fill_container",
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "sm4y2",
+                          "name": "Skill Name",
+                          "fill": "$text-primary",
+                          "content": "Español e inglés",
+                          "fontFamily": "$font-main",
+                          "fontSize": 15,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "F8Owz",
+                          "name": "Confirmed",
+                          "fill": "$accent",
+                          "cornerRadius": 9999,
+                          "padding": [
+                            4,
+                            10
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "qqKUb",
+                              "name": "Label",
+                              "fill": "$text-inverse",
+                              "content": "✓ Confirmada",
+                              "fontFamily": "$font-main",
+                              "fontSize": 11,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "IOdzD",
+                      "name": "Reason",
+                      "fill": "$text-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Sugerida porque mencionaste que hablas dos idiomas",
+                      "fontFamily": "$font-main",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "QQFDj",
+          "name": "Bottom Bar",
+          "width": "fill_container",
+          "fill": "#FFFFFF",
+          "padding": [
+            16,
+            20
+          ],
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "id": "dZ9P0",
+              "type": "ref",
+              "ref": "pCJtv",
+              "name": "Back",
+              "descendants": {
+                "KziLa": {
+                  "content": "← Volver"
+                }
+              }
+            },
+            {
+              "id": "khG90",
+              "type": "ref",
+              "ref": "LMUoR",
+              "name": "Continue",
+              "descendants": {
+                "EjHkh": {
+                  "content": "Continuar"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "Iyaqe",
+      "x": 3900,
+      "y": 212,
+      "name": "Screen 15 - Review Dashboard",
+      "clip": true,
+      "width": 420,
+      "height": 900,
+      "fill": "$bg-primary",
+      "layout": "vertical",
+      "children": [
+        {
+          "id": "qWEGn",
+          "type": "ref",
+          "ref": "l5TWA",
+          "name": "Header",
+          "width": "fill_container"
+        },
+        {
+          "id": "xIBO0",
+          "type": "ref",
+          "ref": "qEHnY",
+          "name": "Progress",
+          "width": "fill_container",
+          "padding": [
+            0,
+            20
+          ],
+          "descendants": {
+            "lceQV": {
+              "content": "Revisión"
+            },
+            "PY55i": {
+              "content": "90%"
+            },
+            "TIglB": {
+              "width": 360
+            }
+          }
+        },
+        {
+          "type": "frame",
+          "id": "TuDJI",
+          "name": "Content",
+          "width": "fill_container",
+          "height": "fill_container",
+          "layout": "vertical",
+          "gap": 16,
+          "padding": 20,
+          "children": [
+            {
+              "type": "text",
+              "id": "pmAj7",
+              "name": "Title",
+              "fill": "$text-primary",
+              "content": "Revisa tu información",
+              "fontFamily": "$font-main",
+              "fontSize": 22,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "yg7oW",
+              "name": "Subtitle",
+              "fill": "$text-secondary",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Aquí puedes ver todo lo que hemos recopilado. Completa las secciones que faltan para mejorar tu currículum.",
+              "fontFamily": "$font-main",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "PDkQR",
+              "name": "Sections Grid",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "E4ucqg",
+                  "name": "Section Información personal",
+                  "width": "fill_container",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 12,
+                  "stroke": "$border",
+                  "strokeWidth": 1,
+                  "padding": [
+                    14,
+                    16
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "tglbL",
+                      "name": "Left",
+                      "gap": 12,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "aganD",
+                          "name": "Badge",
+                          "width": 28,
+                          "height": 28,
+                          "fill": "$accent-light",
+                          "cornerRadius": 9999,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "V8dYT",
+                              "name": "Icon",
+                              "fill": "$success",
+                              "content": "✓",
+                              "fontFamily": "$font-main",
+                              "fontSize": 12,
+                              "fontWeight": "700"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "sqM1P",
+                          "name": "Name",
+                          "fill": "$text-primary",
+                          "content": "Información personal",
+                          "fontFamily": "$font-main",
+                          "fontSize": 14,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "fwwQD",
+                      "name": "Right",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "m8Ckt",
+                          "name": "Status",
+                          "fill": "$success",
+                          "content": "Completo",
+                          "fontFamily": "$font-main",
+                          "fontSize": 12,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "bc5IG",
+                          "name": "Arrow",
+                          "fill": "$text-muted",
+                          "content": "→",
+                          "fontFamily": "$font-main",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "prjcS",
+                  "name": "Section Objetivo profesional",
+                  "width": "fill_container",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 12,
+                  "stroke": "$border",
+                  "strokeWidth": 1,
+                  "padding": [
+                    14,
+                    16
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "LFL4t",
+                      "name": "Left",
+                      "gap": 12,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "o7H4mT",
+                          "name": "Badge",
+                          "width": 28,
+                          "height": 28,
+                          "fill": "$accent-light",
+                          "cornerRadius": 9999,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "hjkKr",
+                              "name": "Icon",
+                              "fill": "$success",
+                              "content": "✓",
+                              "fontFamily": "$font-main",
+                              "fontSize": 12,
+                              "fontWeight": "700"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "UOABN",
+                          "name": "Name",
+                          "fill": "$text-primary",
+                          "content": "Objetivo profesional",
+                          "fontFamily": "$font-main",
+                          "fontSize": 14,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "nALaL",
+                      "name": "Right",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "qXWMW",
+                          "name": "Status",
+                          "fill": "$success",
+                          "content": "Completo",
+                          "fontFamily": "$font-main",
+                          "fontSize": 12,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "I147Gs",
+                          "name": "Arrow",
+                          "fill": "$text-muted",
+                          "content": "→",
+                          "fontFamily": "$font-main",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "UU0Kv",
+                  "name": "Section Educación",
+                  "width": "fill_container",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 12,
+                  "stroke": "$border",
+                  "strokeWidth": 1,
+                  "padding": [
+                    14,
+                    16
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "z3LOp",
+                      "name": "Left",
+                      "gap": 12,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "ELgeY",
+                          "name": "Badge",
+                          "width": 28,
+                          "height": 28,
+                          "fill": "$accent-light",
+                          "cornerRadius": 9999,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "udlUJ",
+                              "name": "Icon",
+                              "fill": "$success",
+                              "content": "✓",
+                              "fontFamily": "$font-main",
+                              "fontSize": 12,
+                              "fontWeight": "700"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "RMrwg",
+                          "name": "Name",
+                          "fill": "$text-primary",
+                          "content": "Educación",
+                          "fontFamily": "$font-main",
+                          "fontSize": 14,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "yac1n",
+                      "name": "Right",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "V3VBn",
+                          "name": "Status",
+                          "fill": "$success",
+                          "content": "Completo",
+                          "fontFamily": "$font-main",
+                          "fontSize": 12,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "PVhOm",
+                          "name": "Arrow",
+                          "fill": "$text-muted",
+                          "content": "→",
+                          "fontFamily": "$font-main",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "QFIdA",
+                  "name": "Section Experiencia",
+                  "width": "fill_container",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 12,
+                  "stroke": "$border",
+                  "strokeWidth": 1,
+                  "padding": [
+                    14,
+                    16
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "V0nMW",
+                      "name": "Left",
+                      "gap": 12,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "Ei0dV",
+                          "name": "Badge",
+                          "width": 28,
+                          "height": 28,
+                          "fill": "#FEF3C7",
+                          "cornerRadius": 9999,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "oUmuf",
+                              "name": "Icon",
+                              "fill": "$warning",
+                              "content": "!",
+                              "fontFamily": "$font-main",
+                              "fontSize": 12,
+                              "fontWeight": "700"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "GG67i",
+                          "name": "Name",
+                          "fill": "$text-primary",
+                          "content": "Experiencia",
+                          "fontFamily": "$font-main",
+                          "fontSize": 14,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "fs2MC",
+                      "name": "Right",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "ucIdb",
+                          "name": "Status",
+                          "fill": "$warning",
+                          "content": "Parcial",
+                          "fontFamily": "$font-main",
+                          "fontSize": 12,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "kks4p",
+                          "name": "Arrow",
+                          "fill": "$text-muted",
+                          "content": "→",
+                          "fontFamily": "$font-main",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "UBPFp",
+                  "name": "Section Habilidades",
+                  "width": "fill_container",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 12,
+                  "stroke": "$border",
+                  "strokeWidth": 1,
+                  "padding": [
+                    14,
+                    16
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "tfdhJ",
+                      "name": "Left",
+                      "gap": 12,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "PojaF",
+                          "name": "Badge",
+                          "width": 28,
+                          "height": 28,
+                          "fill": "#FEF3C7",
+                          "cornerRadius": 9999,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "Ty7wB",
+                              "name": "Icon",
+                              "fill": "$warning",
+                              "content": "!",
+                              "fontFamily": "$font-main",
+                              "fontSize": 12,
+                              "fontWeight": "700"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "X2ff0y",
+                          "name": "Name",
+                          "fill": "$text-primary",
+                          "content": "Habilidades",
+                          "fontFamily": "$font-main",
+                          "fontSize": 14,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Rzckj",
+                      "name": "Right",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Z7Ykw",
+                          "name": "Status",
+                          "fill": "$warning",
+                          "content": "Parcial",
+                          "fontFamily": "$font-main",
+                          "fontSize": 12,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "a2a41",
+                          "name": "Arrow",
+                          "fill": "$text-muted",
+                          "content": "→",
+                          "fontFamily": "$font-main",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "Vj5cx",
+                  "name": "Section Certificaciones",
+                  "width": "fill_container",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 12,
+                  "stroke": "$border",
+                  "strokeWidth": 1,
+                  "padding": [
+                    14,
+                    16
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "ag52f",
+                      "name": "Left",
+                      "gap": 12,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "vSbbu",
+                          "name": "Badge",
+                          "width": 28,
+                          "height": 28,
+                          "fill": "#F3F4F6",
+                          "cornerRadius": 9999,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "ehf5O",
+                              "name": "Icon",
+                              "fill": "$text-muted",
+                              "content": "○",
+                              "fontFamily": "$font-main",
+                              "fontSize": 12,
+                              "fontWeight": "700"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "LjhP1",
+                          "name": "Name",
+                          "fill": "$text-primary",
+                          "content": "Certificaciones",
+                          "fontFamily": "$font-main",
+                          "fontSize": 14,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "FKivT",
+                      "name": "Right",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "m6M8w",
+                          "name": "Status",
+                          "fill": "$text-muted",
+                          "content": "Opcional",
+                          "fontFamily": "$font-main",
+                          "fontSize": 12,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "cQpKZ",
+                          "name": "Arrow",
+                          "fill": "$text-muted",
+                          "content": "→",
+                          "fontFamily": "$font-main",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "YyICv",
+                  "name": "Section Idiomas",
+                  "width": "fill_container",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 12,
+                  "stroke": "$border",
+                  "strokeWidth": 1,
+                  "padding": [
+                    14,
+                    16
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "ldpd4",
+                      "name": "Left",
+                      "gap": 12,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "e4UBTN",
+                          "name": "Badge",
+                          "width": 28,
+                          "height": 28,
+                          "fill": "#F3F4F6",
+                          "cornerRadius": 9999,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "CExWB",
+                              "name": "Icon",
+                              "fill": "$error",
+                              "content": "✕",
+                              "fontFamily": "$font-main",
+                              "fontSize": 12,
+                              "fontWeight": "700"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "iMf1P",
+                          "name": "Name",
+                          "fill": "$text-primary",
+                          "content": "Idiomas",
+                          "fontFamily": "$font-main",
+                          "fontSize": 14,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "gRDUA",
+                      "name": "Right",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Hbwym",
+                          "name": "Status",
+                          "fill": "$error",
+                          "content": "Falta información",
+                          "fontFamily": "$font-main",
+                          "fontSize": 12,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "YY4tc",
+                          "name": "Arrow",
+                          "fill": "$text-muted",
+                          "content": "→",
+                          "fontFamily": "$font-main",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "HwfKv",
+                  "name": "Section Proyectos y logros",
+                  "width": "fill_container",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 12,
+                  "stroke": "$border",
+                  "strokeWidth": 1,
+                  "padding": [
+                    14,
+                    16
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "uAzjS",
+                      "name": "Left",
+                      "gap": 12,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "BKhxc",
+                          "name": "Badge",
+                          "width": 28,
+                          "height": 28,
+                          "fill": "#F3F4F6",
+                          "cornerRadius": 9999,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "Z6etQ",
+                              "name": "Icon",
+                              "fill": "$text-muted",
+                              "content": "○",
+                              "fontFamily": "$font-main",
+                              "fontSize": 12,
+                              "fontWeight": "700"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "v4MnxJ",
+                          "name": "Name",
+                          "fill": "$text-primary",
+                          "content": "Proyectos y logros",
+                          "fontFamily": "$font-main",
+                          "fontSize": 14,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "NeAuG",
+                      "name": "Right",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "N0Wt5",
+                          "name": "Status",
+                          "fill": "$text-muted",
+                          "content": "Opcional",
+                          "fontFamily": "$font-main",
+                          "fontSize": 12,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "RkFG7",
+                          "name": "Arrow",
+                          "fill": "$text-muted",
+                          "content": "→",
+                          "fontFamily": "$font-main",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "ENijA",
+              "name": "Recommendations",
+              "width": "fill_container",
+              "fill": "$ai-bubble",
+              "cornerRadius": 12,
+              "stroke": "$accent",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "gap": 12,
+              "padding": 16,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "uvqDz",
+                  "name": "Rec Title",
+                  "fill": "$accent-dark",
+                  "content": "💡 Para mejorar tu currículum",
+                  "fontFamily": "$font-main",
+                  "fontSize": 14,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "S3NFfl",
+                  "name": "Rec Agregar fechas a tu ",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "lHoNh",
+                      "name": "Bullet",
+                      "fill": "$accent-dark",
+                      "content": "•",
+                      "fontFamily": "$font-main",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "iL0yc",
+                      "name": "Text",
+                      "fill": "$text-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Agregar fechas a tu experiencia más reciente",
+                      "fontFamily": "$font-main",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "fu9hO",
+                  "name": "Rec Explicar qué hacías ",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "xF2NU",
+                      "name": "Bullet",
+                      "fill": "$accent-dark",
+                      "content": "•",
+                      "fontFamily": "$font-main",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "sHYGu",
+                      "name": "Text",
+                      "fill": "$text-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Explicar qué hacías en tu negocio",
+                      "fontFamily": "$font-main",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "o7C9Vu",
+                  "name": "Rec Confirmar tus habili",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ePxRl",
+                      "name": "Bullet",
+                      "fill": "$accent-dark",
+                      "content": "•",
+                      "fontFamily": "$font-main",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "O5q50c",
+                      "name": "Text",
+                      "fill": "$text-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Confirmar tus habilidades sugeridas",
+                      "fontFamily": "$font-main",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "WTOCY",
+          "name": "Bottom Bar",
+          "width": "fill_container",
+          "fill": "#FFFFFF",
+          "padding": [
+            16,
+            20
+          ],
+          "justifyContent": "center",
+          "alignItems": "center",
+          "children": [
+            {
+              "id": "q6zft",
+              "type": "ref",
+              "ref": "LMUoR",
+              "name": "Generate",
+              "descendants": {
+                "EjHkh": {
+                  "content": "Generar mi currículum"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "oZLHw",
+      "x": 4380,
+      "y": 212,
+      "name": "Screen 17 - Resume Preview Desktop",
+      "clip": true,
+      "width": 1200,
+      "height": 900,
+      "fill": "#F3F4F6",
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "cMMpT",
+          "name": "Header Bar",
+          "width": "fill_container",
+          "height": 56,
+          "fill": "#FFFFFF",
+          "padding": [
+            0,
+            24
+          ],
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "cLA4s",
+              "name": "Logo",
+              "fill": "$text-primary",
+              "content": "Mi CV con IA",
+              "fontFamily": "$font-main",
+              "fontSize": 18,
+              "fontWeight": "700"
+            },
+            {
+              "type": "frame",
+              "id": "NBPNr",
+              "name": "Actions",
+              "gap": 12,
+              "alignItems": "center",
+              "children": [
+                {
+                  "id": "N4H7x",
+                  "type": "ref",
+                  "ref": "CW3VZ",
+                  "name": "Edit Btn",
+                  "descendants": {
+                    "qAVB5": {
+                      "content": "Editar información"
+                    }
+                  }
+                },
+                {
+                  "id": "kyLGy",
+                  "type": "ref",
+                  "ref": "LMUoR",
+                  "name": "Download Btn",
+                  "descendants": {
+                    "EjHkh": {
+                      "content": "Descargar PDF"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "t7Mi4M",
+          "name": "Split View",
+          "width": "fill_container",
+          "height": "fill_container",
+          "children": [
+            {
+              "type": "frame",
+              "id": "I5axCK",
+              "name": "Left Panel",
+              "width": 360,
+              "height": "fill_container",
+              "fill": "#FFFFFF",
+              "layout": "vertical",
+              "gap": 16,
+              "padding": [
+                24,
+                20
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "Q0Oi0",
+                  "name": "Panel Title",
+                  "fill": "$text-primary",
+                  "content": "Editar secciones",
+                  "fontFamily": "$font-main",
+                  "fontSize": 18,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "HKzly",
+                  "name": "Edit Resumen profesional",
+                  "width": "fill_container",
+                  "fill": "$accent-light",
+                  "cornerRadius": 10,
+                  "stroke": "$accent",
+                  "strokeWidth": 1,
+                  "padding": [
+                    12,
+                    14
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "R7fSN",
+                      "name": "Label",
+                      "fill": "$accent-dark",
+                      "content": "Resumen profesional",
+                      "fontFamily": "$font-main",
+                      "fontSize": 14,
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "text",
+                      "id": "CbrB5",
+                      "name": "Edit",
+                      "fill": "$accent-dark",
+                      "content": "Editar",
+                      "fontFamily": "$font-main",
+                      "fontSize": 12,
+                      "fontWeight": "500"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "s28hw",
+                  "name": "Edit Experiencia laboral",
+                  "width": "fill_container",
+                  "fill": "#F9FAFB",
+                  "cornerRadius": 10,
+                  "stroke": "$border",
+                  "strokeWidth": 1,
+                  "padding": [
+                    12,
+                    14
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ZUyjF",
+                      "name": "Label",
+                      "fill": "$text-primary",
+                      "content": "Experiencia laboral",
+                      "fontFamily": "$font-main",
+                      "fontSize": 14,
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "text",
+                      "id": "vpNQg",
+                      "name": "Edit",
+                      "fill": "$accent-dark",
+                      "content": "Editar",
+                      "fontFamily": "$font-main",
+                      "fontSize": 12,
+                      "fontWeight": "500"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ySUvt",
+                  "name": "Edit Educación",
+                  "width": "fill_container",
+                  "fill": "#F9FAFB",
+                  "cornerRadius": 10,
+                  "stroke": "$border",
+                  "strokeWidth": 1,
+                  "padding": [
+                    12,
+                    14
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "SpBAG",
+                      "name": "Label",
+                      "fill": "$text-primary",
+                      "content": "Educación",
+                      "fontFamily": "$font-main",
+                      "fontSize": 14,
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "text",
+                      "id": "q9Imy",
+                      "name": "Edit",
+                      "fill": "$accent-dark",
+                      "content": "Editar",
+                      "fontFamily": "$font-main",
+                      "fontSize": 12,
+                      "fontWeight": "500"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "OzHoZ",
+                  "name": "Edit Habilidades",
+                  "width": "fill_container",
+                  "fill": "#F9FAFB",
+                  "cornerRadius": 10,
+                  "stroke": "$border",
+                  "strokeWidth": 1,
+                  "padding": [
+                    12,
+                    14
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "z8OB0F",
+                      "name": "Label",
+                      "fill": "$text-primary",
+                      "content": "Habilidades",
+                      "fontFamily": "$font-main",
+                      "fontSize": 14,
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "text",
+                      "id": "nsQkQ",
+                      "name": "Edit",
+                      "fill": "$accent-dark",
+                      "content": "Editar",
+                      "fontFamily": "$font-main",
+                      "fontSize": 12,
+                      "fontWeight": "500"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "mu2c1",
+                  "name": "Edit Certificaciones",
+                  "width": "fill_container",
+                  "fill": "#F9FAFB",
+                  "cornerRadius": 10,
+                  "stroke": "$border",
+                  "strokeWidth": 1,
+                  "padding": [
+                    12,
+                    14
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "W2sA5o",
+                      "name": "Label",
+                      "fill": "$text-primary",
+                      "content": "Certificaciones",
+                      "fontFamily": "$font-main",
+                      "fontSize": 14,
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "text",
+                      "id": "Pup4a",
+                      "name": "Edit",
+                      "fill": "$accent-dark",
+                      "content": "Editar",
+                      "fontFamily": "$font-main",
+                      "fontSize": 12,
+                      "fontWeight": "500"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ugqpI",
+                  "name": "Edit Idiomas",
+                  "width": "fill_container",
+                  "fill": "#F9FAFB",
+                  "cornerRadius": 10,
+                  "stroke": "$border",
+                  "strokeWidth": 1,
+                  "padding": [
+                    12,
+                    14
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "XN4vr",
+                      "name": "Label",
+                      "fill": "$text-primary",
+                      "content": "Idiomas",
+                      "fontFamily": "$font-main",
+                      "fontSize": 14,
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "text",
+                      "id": "F3Mu8",
+                      "name": "Edit",
+                      "fill": "$accent-dark",
+                      "content": "Editar",
+                      "fontFamily": "$font-main",
+                      "fontSize": 12,
+                      "fontWeight": "500"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "OsmeW",
+                  "name": "Divider",
+                  "width": "fill_container",
+                  "height": 1,
+                  "fill": "$border"
+                },
+                {
+                  "type": "text",
+                  "id": "o9ypb",
+                  "name": "AI Actions Title",
+                  "fill": "$text-primary",
+                  "content": "Acciones de IA",
+                  "fontFamily": "$font-main",
+                  "fontSize": 14,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "Br8Kw",
+                  "name": "AI Regenerar esta ",
+                  "width": "fill_container",
+                  "fill": "$ai-bubble",
+                  "cornerRadius": 8,
+                  "gap": 8,
+                  "padding": [
+                    10,
+                    14
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "CPKNb",
+                      "name": "Icon",
+                      "fill": "$accent-dark",
+                      "content": "✨",
+                      "fontFamily": "$font-main",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "a3I4YB",
+                      "name": "Label",
+                      "fill": "$accent-dark",
+                      "content": "Regenerar esta sección",
+                      "fontFamily": "$font-main",
+                      "fontSize": 13,
+                      "fontWeight": "500"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "xi6vB",
+                  "name": "AI Hacerlo más bre",
+                  "width": "fill_container",
+                  "fill": "$ai-bubble",
+                  "cornerRadius": 8,
+                  "gap": 8,
+                  "padding": [
+                    10,
+                    14
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "KsWd1",
+                      "name": "Icon",
+                      "fill": "$accent-dark",
+                      "content": "✨",
+                      "fontFamily": "$font-main",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "xk7hA",
+                      "name": "Label",
+                      "fill": "$accent-dark",
+                      "content": "Hacerlo más breve",
+                      "fontFamily": "$font-main",
+                      "fontSize": 13,
+                      "fontWeight": "500"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "kYhTk",
+                  "name": "AI Usar palabras m",
+                  "width": "fill_container",
+                  "fill": "$ai-bubble",
+                  "cornerRadius": 8,
+                  "gap": 8,
+                  "padding": [
+                    10,
+                    14
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "tCogF",
+                      "name": "Icon",
+                      "fill": "$accent-dark",
+                      "content": "✨",
+                      "fontFamily": "$font-main",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "sROMh",
+                      "name": "Label",
+                      "fill": "$accent-dark",
+                      "content": "Usar palabras más sencillas",
+                      "fontFamily": "$font-main",
+                      "fontSize": 13,
+                      "fontWeight": "500"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "X9IeF",
+                  "name": "AI Hacerlo más pro",
+                  "width": "fill_container",
+                  "fill": "$ai-bubble",
+                  "cornerRadius": 8,
+                  "gap": 8,
+                  "padding": [
+                    10,
+                    14
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "pJ07x",
+                      "name": "Icon",
+                      "fill": "$accent-dark",
+                      "content": "✨",
+                      "fontFamily": "$font-main",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "AGhPA",
+                      "name": "Label",
+                      "fill": "$accent-dark",
+                      "content": "Hacerlo más profesional",
+                      "fontFamily": "$font-main",
+                      "fontSize": 13,
+                      "fontWeight": "500"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "ScMx1",
+              "name": "Right Panel",
+              "width": "fill_container",
+              "height": "fill_container",
+              "layout": "vertical",
+              "padding": [
+                24,
+                40
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "q6rVP",
+                  "name": "Resume Document",
+                  "width": 540,
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 4,
+                  "effect": {
+                    "type": "shadow",
+                    "shadowType": "outer",
+                    "color": "#0000001a",
+                    "offset": {
+                      "x": 0,
+                      "y": 2
+                    },
+                    "blur": 8
+                  },
+                  "layout": "vertical",
+                  "gap": 20,
+                  "padding": [
+                    40,
+                    36
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "n1kia",
+                      "name": "Name",
+                      "fill": "$text-primary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "María García López",
+                      "textAlign": "center",
+                      "fontFamily": "$font-main",
+                      "fontSize": 24,
+                      "fontWeight": "700"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "siUwY",
+                      "name": "Contact",
+                      "width": "fill_container",
+                      "gap": 16,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Xt51x",
+                          "name": "Contact Ciudad de ",
+                          "fill": "$text-secondary",
+                          "content": "Ciudad de México",
+                          "fontFamily": "$font-main",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "V5oOZm",
+                          "name": "Contact maria@emai",
+                          "fill": "$text-secondary",
+                          "content": "maria@email.com",
+                          "fontFamily": "$font-main",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "JRBk3",
+                          "name": "Contact (55) 1234-",
+                          "fill": "$text-secondary",
+                          "content": "(55) 1234-5678",
+                          "fontFamily": "$font-main",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "j4Y8k",
+                      "name": "Divider",
+                      "width": "fill_container",
+                      "height": 1,
+                      "fill": "#D1D5DB"
+                    },
+                    {
+                      "type": "text",
+                      "id": "dmzHb",
+                      "name": "Summary Title",
+                      "fill": "$text-primary",
+                      "content": "RESUMEN PROFESIONAL",
+                      "fontFamily": "$font-main",
+                      "fontSize": 13,
+                      "fontWeight": "700",
+                      "letterSpacing": 1
+                    },
+                    {
+                      "type": "text",
+                      "id": "bPJfR",
+                      "name": "Summary Text",
+                      "fill": "$text-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Profesional con más de 3 años de experiencia en atención al cliente y administración. Habilidades demostradas en organización, comunicación y resolución de problemas. Experiencia en manejo de inventario y coordinación de equipos.",
+                      "lineHeight": 1.6,
+                      "fontFamily": "$font-main",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "tT0KQ",
+                      "name": "Experience Title",
+                      "fill": "$text-primary",
+                      "content": "EXPERIENCIA LABORAL",
+                      "fontFamily": "$font-main",
+                      "fontSize": 13,
+                      "fontWeight": "700",
+                      "letterSpacing": 1
+                    },
+                    {
+                      "type": "frame",
+                      "id": "AZnnX",
+                      "name": "Exp Entry",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 4,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "IfY2G",
+                          "name": "Exp Header",
+                          "width": "fill_container",
+                          "justifyContent": "space_between",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "a7zPe",
+                              "name": "Role",
+                              "fill": "$text-primary",
+                              "content": "Asistente Administrativa",
+                              "fontFamily": "$font-main",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "MUw0X",
+                              "name": "Dates",
+                              "fill": "$text-muted",
+                              "content": "Ene 2021 – Presente",
+                              "fontFamily": "$font-main",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "OgHvW",
+                          "name": "Company",
+                          "fill": "$text-secondary",
+                          "content": "Consultorio Dental Sonrisas, Ciudad de México",
+                          "fontFamily": "$font-main",
+                          "fontSize": 11,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "RX6gH",
+                          "name": "Bullets",
+                          "fill": "$text-secondary",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "• Coordinación de citas para más de 50 pacientes semanales\n• Manejo de inventario de suministros dentales\n• Atención telefónica y presencial a pacientes\n• Administración de pagos y facturación",
+                          "lineHeight": 1.6,
+                          "fontFamily": "$font-main",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "lZ2CR",
+                      "name": "Skills Title",
+                      "fill": "$text-primary",
+                      "content": "HABILIDADES",
+                      "fontFamily": "$font-main",
+                      "fontSize": 13,
+                      "fontWeight": "700",
+                      "letterSpacing": 1
+                    },
+                    {
+                      "type": "text",
+                      "id": "hzFAa",
+                      "name": "Skills List",
+                      "fill": "$text-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Atención al cliente • Microsoft Excel • Organización • Comunicación verbal • Facturación • Manejo de inventario • Español (nativo) • Inglés (intermedio)",
+                      "lineHeight": 1.6,
+                      "fontFamily": "$font-main",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "Yr4Mz",
+      "x": 5640,
+      "y": 212,
+      "name": "Screen 16 - Loading",
+      "clip": true,
+      "width": 420,
+      "height": 900,
+      "fill": "$bg-primary",
+      "layout": "vertical",
+      "justifyContent": "center",
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "frame",
+          "id": "U0Dnb",
+          "name": "Loading Content",
+          "layout": "vertical",
+          "gap": 32,
+          "padding": [
+            0,
+            40
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "ownf0",
+              "name": "Pulse Ring",
+              "width": 100,
+              "height": 100,
+              "fill": "$accent-light",
+              "cornerRadius": 9999,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "wfR1V",
+                  "name": "Inner Ring",
+                  "width": 72,
+                  "height": 72,
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 9999,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "U47HS",
+                      "name": "AI Icon",
+                      "fill": "$accent-dark",
+                      "content": "IA",
+                      "fontFamily": "$font-main",
+                      "fontSize": 28,
+                      "fontWeight": "700"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "LhnH2",
+              "name": "Loading Title",
+              "fill": "$text-primary",
+              "textGrowth": "fixed-width",
+              "width": 320,
+              "content": "Preparando tu currículum",
+              "textAlign": "center",
+              "fontFamily": "$font-main",
+              "fontSize": 20,
+              "fontWeight": "600"
+            },
+            {
+              "type": "frame",
+              "id": "RuDAz",
+              "name": "Steps",
+              "layout": "vertical",
+              "gap": 14,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "D11dD",
+                  "name": "Step Organizando tu ",
+                  "gap": 10,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "AzZ6E",
+                      "name": "Icon",
+                      "fill": "$accent",
+                      "content": "✓",
+                      "fontFamily": "$font-main",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "sUzsG",
+                      "name": "Text",
+                      "fill": "$text-primary",
+                      "content": "Organizando tu experiencia",
+                      "fontFamily": "$font-main",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "AIJml",
+                  "name": "Step Identificando t",
+                  "gap": 10,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "yudhe",
+                      "name": "Icon",
+                      "fill": "$accent",
+                      "content": "✓",
+                      "fontFamily": "$font-main",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "Z5wSxC",
+                      "name": "Text",
+                      "fill": "$text-primary",
+                      "content": "Identificando tus habilidades",
+                      "fontFamily": "$font-main",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "hj4f0",
+                  "name": "Step Escribiendo tu ",
+                  "gap": 10,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "ZYSy2",
+                      "name": "Icon",
+                      "fill": "$text-muted",
+                      "content": "○",
+                      "fontFamily": "$font-main",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "j1bBN",
+                      "name": "Text",
+                      "fill": "$text-muted",
+                      "content": "Escribiendo tu perfil profesional",
+                      "fontFamily": "$font-main",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "L13Xx7",
+                  "name": "Step Preparando tu c",
+                  "gap": 10,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "t6Y0q",
+                      "name": "Icon",
+                      "fill": "$text-muted",
+                      "content": "○",
+                      "fontFamily": "$font-main",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "EUKzC",
+                      "name": "Text",
+                      "fill": "$text-muted",
+                      "content": "Preparando tu currículum",
+                      "fontFamily": "$font-main",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "OXEFf",
+              "name": "Note",
+              "fill": "$text-secondary",
+              "textGrowth": "fixed-width",
+              "width": 280,
+              "content": "La IA no agregará información que no hayas proporcionado o confirmado.",
+              "textAlign": "center",
+              "fontFamily": "$font-main",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "CoiTI",
+      "x": 6120,
+      "y": 212,
+      "name": "Screen 19 - Download",
+      "clip": true,
+      "width": 420,
+      "height": 900,
+      "fill": "$bg-primary",
+      "layout": "vertical",
+      "children": [
+        {
+          "id": "Zs3IU",
+          "type": "ref",
+          "ref": "l5TWA",
+          "name": "Header",
+          "width": "fill_container"
+        },
+        {
+          "type": "frame",
+          "id": "GKXa5",
+          "name": "Content",
+          "width": "fill_container",
+          "height": "fill_container",
+          "layout": "vertical",
+          "gap": 24,
+          "padding": [
+            40,
+            24,
+            24,
+            24
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "Fzgrn",
+              "name": "Success Badge",
+              "width": 80,
+              "height": 80,
+              "fill": "$accent-light",
+              "cornerRadius": 9999,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "pvGUT",
+                  "name": "Check",
+                  "fill": "$accent-dark",
+                  "content": "✓",
+                  "fontFamily": "$font-main",
+                  "fontSize": 36,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "N5Qz4",
+              "name": "Title",
+              "fill": "$text-primary",
+              "textGrowth": "fixed-width",
+              "width": 340,
+              "content": "¡Tu currículum está listo!",
+              "textAlign": "center",
+              "fontFamily": "$font-main",
+              "fontSize": 24,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "uAqu0",
+              "name": "Subtitle",
+              "fill": "$text-secondary",
+              "textGrowth": "fixed-width",
+              "width": 340,
+              "content": "Hemos organizado tu información en un formato profesional listo para enviar a empleadores.",
+              "textAlign": "center",
+              "fontFamily": "$font-main",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "id": "aQuSV",
+              "type": "ref",
+              "ref": "LMUoR",
+              "name": "Download",
+              "width": 300,
+              "descendants": {
+                "EjHkh": {
+                  "content": "⬇ Descargar PDF"
+                }
+              }
+            },
+            {
+              "id": "LNoP0",
+              "type": "ref",
+              "ref": "CW3VZ",
+              "name": "Edit",
+              "width": 300,
+              "descendants": {
+                "qAVB5": {
+                  "content": "Editar mi currículum"
+                }
+              }
+            },
+            {
+              "id": "VWbbV",
+              "type": "ref",
+              "ref": "CW3VZ",
+              "name": "New Version",
+              "width": 300,
+              "descendants": {
+                "qAVB5": {
+                  "content": "Crear otra versión"
+                }
+              }
+            },
+            {
+              "type": "frame",
+              "id": "Cr8ld",
+              "name": "Divider",
+              "width": 300,
+              "height": 1,
+              "fill": "$border"
+            },
+            {
+              "type": "text",
+              "id": "vaqHh",
+              "name": "Next Steps Title",
+              "fill": "$text-primary",
+              "content": "¿Qué sigue?",
+              "fontFamily": "$font-main",
+              "fontSize": 16,
+              "fontWeight": "600"
+            },
+            {
+              "type": "frame",
+              "id": "VRQlN",
+              "name": "Next Steps",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 10,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "ZltJc",
+                  "name": "Next Adaptarlo a una",
+                  "width": "fill_container",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 12,
+                  "stroke": "$border",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 4,
+                  "padding": [
+                    14,
+                    16
+                  ],
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "M8BZI",
+                      "name": "Top",
+                      "width": "fill_container",
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "bz2h8",
+                          "name": "Title",
+                          "fill": "$text-primary",
+                          "content": "Adaptarlo a una oferta de trabajo",
+                          "fontFamily": "$font-main",
+                          "fontSize": 14,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "TIxMv",
+                          "name": "Arrow",
+                          "fill": "$text-muted",
+                          "content": "→",
+                          "fontFamily": "$font-main",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "bnZE9",
+                      "name": "Desc",
+                      "fill": "$text-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Ajusta tu currículum para una vacante específica",
+                      "fontFamily": "$font-main",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "P1FU9",
+                  "name": "Next Practicar para ",
+                  "width": "fill_container",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 12,
+                  "stroke": "$border",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 4,
+                  "padding": [
+                    14,
+                    16
+                  ],
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "Jzc9P",
+                      "name": "Top",
+                      "width": "fill_container",
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "eDBIS",
+                          "name": "Title",
+                          "fill": "$text-primary",
+                          "content": "Practicar para una entrevista",
+                          "fontFamily": "$font-main",
+                          "fontSize": 14,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "fMmcT",
+                          "name": "Arrow",
+                          "fill": "$text-muted",
+                          "content": "→",
+                          "fontFamily": "$font-main",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "HdJtU",
+                      "name": "Desc",
+                      "fill": "$text-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Prepárate con preguntas basadas en tu perfil",
+                      "fontFamily": "$font-main",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "FPC25",
+                  "name": "Next Crear una carta",
+                  "width": "fill_container",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 12,
+                  "stroke": "$border",
+                  "strokeWidth": 1,
+                  "layout": "vertical",
+                  "gap": 4,
+                  "padding": [
+                    14,
+                    16
+                  ],
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "f1nME8",
+                      "name": "Top",
+                      "width": "fill_container",
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "CSFgX",
+                          "name": "Title",
+                          "fill": "$text-primary",
+                          "content": "Crear una carta de presentación",
+                          "fontFamily": "$font-main",
+                          "fontSize": 14,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "Jqskb",
+                          "name": "Arrow",
+                          "fill": "$text-muted",
+                          "content": "→",
+                          "fontFamily": "$font-main",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "qPN8I",
+                      "name": "Desc",
+                      "fill": "$text-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Complementa tu currículum con una carta profesional",
+                      "fontFamily": "$font-main",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "b483xj",
+                  "name": "Coming Soon",
+                  "fill": "#F3F4F6",
+                  "cornerRadius": 8,
+                  "padding": [
+                    8,
+                    12
+                  ],
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "YDqvz",
+                      "name": "Label",
+                      "fill": "$text-muted",
+                      "content": "Próximamente",
+                      "fontFamily": "$font-main",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variables": {
+    "bg-primary": {
+      "type": "color",
+      "value": "#FAF7F2"
+    },
+    "bg-secondary": {
+      "type": "color",
+      "value": "#F5F5DC"
+    },
+    "bg-card": {
+      "type": "color",
+      "value": "#FFFFFF"
+    },
+    "bg-inverse": {
+      "type": "color",
+      "value": "#1A1A1A"
+    },
+    "text-primary": {
+      "type": "color",
+      "value": "#1A1A1A"
+    },
+    "text-secondary": {
+      "type": "color",
+      "value": "#4B5563"
+    },
+    "text-muted": {
+      "type": "color",
+      "value": "#9CA3AF"
+    },
+    "text-inverse": {
+      "type": "color",
+      "value": "#FFFFFF"
+    },
+    "accent": {
+      "type": "color",
+      "value": "#72D350"
+    },
+    "accent-dark": {
+      "type": "color",
+      "value": "#4CAF50"
+    },
+    "accent-light": {
+      "type": "color",
+      "value": "#E8F5E9"
+    },
+    "border": {
+      "type": "color",
+      "value": "#E5E7EB"
+    },
+    "border-focus": {
+      "type": "color",
+      "value": "#72D350"
+    },
+    "error": {
+      "type": "color",
+      "value": "#EF4444"
+    },
+    "warning": {
+      "type": "color",
+      "value": "#F59E0B"
+    },
+    "success": {
+      "type": "color",
+      "value": "#22C55E"
+    },
+    "ai-bubble": {
+      "type": "color",
+      "value": "#F0FFF0"
+    },
+    "user-bubble": {
+      "type": "color",
+      "value": "#EEF2FF"
+    },
+    "font-main": {
+      "type": "string",
+      "value": "Inter"
+    },
+    "radius-sm": {
+      "type": "number",
+      "value": 8
+    },
+    "radius-md": {
+      "type": "number",
+      "value": 12
+    },
+    "radius-lg": {
+      "type": "number",
+      "value": 16
+    },
+    "radius-full": {
+      "type": "number",
+      "value": 9999
+    },
+    "spacing-xs": {
+      "type": "number",
+      "value": 4
+    },
+    "spacing-sm": {
+      "type": "number",
+      "value": 8
+    },
+    "spacing-md": {
+      "type": "number",
+      "value": 16
+    },
+    "spacing-lg": {
+      "type": "number",
+      "value": 24
+    },
+    "spacing-xl": {
+      "type": "number",
+      "value": 32
+    },
+    "spacing-2xl": {
+      "type": "number",
+      "value": 48
+    }
+  },
+  "fileToken": "05c9c977-ba0d-49b7-b2d2-e0a46ecc2bbd"
+}

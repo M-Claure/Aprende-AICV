@@ -1,0 +1,194 @@
+/**
+ * Browser-side API client. Thin wrappers over the /api routes with a consistent
+ * error shape. Cookies (auth) ride along automatically on same-origin requests.
+ */
+import type { AdaptiveQuestion, InputType } from "@/lib/ai/schemas";
+import type {
+  CompletenessReport,
+  GeneratedResume,
+  PersonalInformation,
+  ResumeProfile,
+  ResumeProfileState,
+  Skill,
+} from "@/types";
+
+export class ApiError extends Error {
+  code?: string;
+  details?: unknown;
+  constructor(message: string, code?: string, details?: unknown) {
+    super(message);
+    this.name = "ApiError";
+    this.code = code;
+    this.details = details;
+  }
+}
+
+async function req<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(path, {
+    ...init,
+    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+  });
+  const json = (await res.json().catch(() => null)) as
+    | { data?: T; error?: { code?: string; message?: string; details?: unknown } }
+    | null;
+  if (!res.ok || !json) {
+    throw new ApiError(json?.error?.message ?? `Error ${res.status}`, json?.error?.code, json?.error?.details);
+  }
+  return json.data as T;
+}
+
+export interface AnswerPayload {
+  questionId: string;
+  section: string;
+  rawAnswer?: string;
+  skipped?: boolean;
+  skillDecisions?: { confirm?: string[]; reject?: string[] };
+  timeSpentMs?: number;
+  /** Coarse device bucket, for segmenting funnel drop-off. */
+  deviceCategory?: "mobile" | "tablet" | "desktop";
+  /** Overwrite this entry instead of creating a new one (back-edit). */
+  targetEntryId?: string;
+}
+
+export interface AnswerResult {
+  state: ResumeProfileState;
+  nextQuestion: AdaptiveQuestion;
+  interpretation: { summary: string; needsConfirmation: boolean } | null;
+  suggestedSkills: Skill[];
+  affectedEntryId: string | null;
+}
+
+/** Client-safe mirror of the server's resume analysis (improvement loop). */
+export interface AnalysisImprovement {
+  questionId: string;
+  section: string;
+  inputType: InputType;
+  title: string;
+  detail: string;
+  followUpQuestion: string;
+  /** Max characters for the answer, resolved server-side from the catalog. */
+  charLimit: number;
+  /** Set for entry deep-dives — the answer enriches this specific entry. */
+  entryType?: "experience" | "project";
+  entryId?: string;
+}
+export interface ResumeAnalysis {
+  overallImpression: string;
+  strengths: string[];
+  improvements: AnalysisImprovement[];
+}
+
+export const api = {
+  /**
+   * Start a new résumé. The server requires consent (`acceptTerms`), a name, and
+   * at least one of `email` / `phone` — either alone is enough. No profile row is
+   * written until those arrive.
+   */
+  createProfile: (input: {
+    acceptTerms: boolean;
+    fullName: string;
+    email?: string;
+    phone?: string;
+  }) =>
+    req<{ profile: ResumeProfile; state: ResumeProfileState }>("/api/resume-profiles", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+
+  getProfile: (id: string) =>
+    req<{ profile: ResumeProfile; personalInformation: PersonalInformation | null; state: ResumeProfileState }>(
+      `/api/resume-profiles/${id}`,
+    ),
+
+  nextQuestion: (id: string) =>
+    req<{ nextQuestion: AdaptiveQuestion; state: ResumeProfileState }>(
+      `/api/resume-profiles/${id}/next-question`,
+    ),
+
+  submitAnswer: (id: string, payload: AnswerPayload) =>
+    req<AnswerResult>(`/api/resume-profiles/${id}/answers`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  completeness: (id: string) =>
+    req<{ completeness: CompletenessReport }>(`/api/resume-profiles/${id}/completeness`),
+
+  // ── Editing (used by the review screen) ──
+  updateProfile: (id: string, body: { careerGoal?: string | null; targetRole?: string | null; location?: string | null }) =>
+    req(`/api/resume-profiles/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+
+  updatePersonalInfo: (id: string, body: Record<string, string | null>) =>
+    req(`/api/resume-profiles/${id}/personal-information`, { method: "PATCH", body: JSON.stringify(body) }),
+
+  addEducation: (id: string, body: Record<string, unknown>) =>
+    req(`/api/resume-profiles/${id}/education`, { method: "POST", body: JSON.stringify(body) }),
+  updateEducation: (entryId: string, body: Record<string, unknown>) =>
+    req(`/api/education/${entryId}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteEducation: (entryId: string) => req(`/api/education/${entryId}`, { method: "DELETE" }),
+
+  addExperience: (id: string, body: Record<string, unknown>) =>
+    req(`/api/resume-profiles/${id}/experience`, { method: "POST", body: JSON.stringify(body) }),
+  updateExperience: (entryId: string, body: Record<string, unknown>) =>
+    req(`/api/experience/${entryId}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteExperience: (entryId: string) => req(`/api/experience/${entryId}`, { method: "DELETE" }),
+
+  addSkills: (id: string, names: string[]) =>
+    req(`/api/resume-profiles/${id}/skills`, { method: "POST", body: JSON.stringify({ names }) }),
+  rejectSkill: (skillId: string) => req(`/api/skills/${skillId}/reject`, { method: "POST" }),
+
+  setInterests: (id: string, interests: string[]) =>
+    req<{ interests: string[] }>(`/api/resume-profiles/${id}/interests`, {
+      method: "PATCH",
+      body: JSON.stringify({ interests }),
+    }),
+
+  /** Extract genuine interests from a free-text answer (negations add nothing). */
+  extractInterests: (id: string, rawAnswer: string) =>
+    req<{ interests: string[]; added: string[] }>(`/api/resume-profiles/${id}/interests/extract`, {
+      method: "POST",
+      body: JSON.stringify({ rawAnswer }),
+    }),
+
+  generate: (id: string) =>
+    req<{ resume: GeneratedResume }>(`/api/resume-profiles/${id}/generate`, { method: "POST" }),
+
+  getResume: (id: string) => req<{ resume: GeneratedResume }>(`/api/resume-profiles/${id}/resume`),
+
+  analyze: (id: string) => req<{ analysis: ResumeAnalysis }>(`/api/resume-profiles/${id}/analyze`, { method: "POST" }),
+
+  enrichEntry: (id: string, entryType: "experience" | "project", entryId: string, rawAnswer: string) =>
+    req(`/api/resume-profiles/${id}/enrich-entry`, {
+      method: "POST",
+      body: JSON.stringify({ entryType, entryId, rawAnswer }),
+    }),
+
+  exportPdfUrl: (id: string) => `/api/resume-profiles/${id}/export-pdf`,
+
+  /** Run the final AI spelling/grammar/formatting pass; returns corrected résumé + notes. */
+  proofread: (id: string) =>
+    req<{ resume: GeneratedResume; notes: string[] }>(`/api/resume-profiles/${id}/proofread`, {
+      method: "POST",
+    }),
+
+  /** Mark the résumé as finalized (locked for download). */
+  finalize: (id: string) =>
+    req<{ profile: ResumeProfile }>(`/api/resume-profiles/${id}/finalize`, { method: "POST" }),
+
+  /** Reopen a finalized résumé for further editing. */
+  reopen: (id: string) =>
+    req<{ profile: ResumeProfile }>(`/api/resume-profiles/${id}/finalize`, { method: "DELETE" }),
+
+  /** Download the PDF as a Blob (POST). Throws ApiError (e.g. not_ready) on failure. */
+  downloadPdf: async (id: string): Promise<Blob> => {
+    const res = await fetch(`/api/resume-profiles/${id}/export-pdf`, { method: "POST" });
+    if (!res.ok) {
+      const json = (await res.json().catch(() => null)) as
+        | { error?: { code?: string; message?: string; details?: unknown } }
+        | null;
+      throw new ApiError(json?.error?.message ?? `Error ${res.status}`, json?.error?.code, json?.error?.details);
+    }
+    return res.blob();
+  },
+  previewUrl: (id: string) => `/api/resume-profiles/${id}/resume/preview`,
+};

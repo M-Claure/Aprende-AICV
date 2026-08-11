@@ -1,0 +1,172 @@
+/**
+ * Persistence abstraction. Domain/service code depends ONLY on this interface,
+ * never on Supabase or SQL directly. Two implementations exist:
+ *  - MemoryStore   (in-process; PERSISTENCE=memory; used for local dev + tests)
+ *  - SupabaseStore (Postgres via Supabase; PERSISTENCE=supabase)
+ *
+ * All methods are scoped by ownership at the call site (route handlers resolve
+ * the authenticated user and pass verified ids); the SupabaseStore additionally
+ * relies on RLS as defense-in-depth.
+ */
+import type {
+  Achievement,
+  Certification,
+  ConversationTurn,
+  EducationEntry,
+  ExperienceEntry,
+  GeneratedResume,
+  Language,
+  PersonalInformation,
+  Project,
+  QuestionState,
+  ResumeProfile,
+  Skill,
+  User,
+} from "@/types";
+
+/** Data fields of an entity, without server-managed keys. */
+type Data<T> = Omit<T, "id" | "resumeProfileId" | "createdAt" | "updatedAt">;
+
+export type CreateProfileInput = Partial<
+  Pick<
+    ResumeProfile,
+    | "status"
+    | "targetRole"
+    | "careerGoal"
+    | "location"
+    | "interests"
+    | "currentSection"
+    | "progressPercentage"
+    | "finalizedAt"
+    | "termsAcceptedAt"
+    | "termsVersion"
+  >
+>;
+export type UpdateProfileInput = CreateProfileInput;
+
+export type PersonalInformationInput = Partial<Data<PersonalInformation>>;
+
+export type CreateEducationInput = Partial<Data<EducationEntry>>;
+export type UpdateEducationInput = Partial<Data<EducationEntry>>;
+
+export type CreateExperienceInput = Partial<Data<ExperienceEntry>> & {
+  experienceType: ExperienceEntry["experienceType"];
+};
+export type UpdateExperienceInput = Partial<Data<ExperienceEntry>>;
+
+export type CreateSkillInput = Partial<Data<Skill>> & { name: string };
+export type UpdateSkillInput = Partial<Data<Skill>>;
+
+export type CreateCertificationInput = Partial<Data<Certification>> & { name: string };
+export type UpdateCertificationInput = Partial<Data<Certification>>;
+
+export type CreateLanguageInput = Partial<Data<Language>> & { name: string };
+export type UpdateLanguageInput = Partial<Data<Language>>;
+
+export type CreateProjectInput = Partial<Data<Project>> & { name: string };
+export type UpdateProjectInput = Partial<Data<Project>>;
+
+export type CreateAchievementInput = Partial<Data<Achievement>> & { title: string };
+export type UpdateAchievementInput = Partial<Data<Achievement>>;
+
+export type CreateConversationTurnInput = Partial<Data<ConversationTurn>> & {
+  questionId: string;
+  section: ConversationTurn["section"];
+  assistantMessage: string;
+};
+
+export type QuestionStateInput = Partial<Data<QuestionState>>;
+
+export type CreateGeneratedResumeInput = Partial<Data<GeneratedResume>>;
+
+export interface Store {
+  // Users
+  getUser(userId: string): Promise<User | null>;
+  upsertUser(user: { id: string; email: string; preferredLanguage?: string }): Promise<User>;
+
+  // Resume profiles
+  createResumeProfile(userId: string, input: CreateProfileInput): Promise<ResumeProfile>;
+  getResumeProfile(id: string): Promise<ResumeProfile | null>;
+  listResumeProfilesByUser(userId: string): Promise<ResumeProfile[]>;
+  updateResumeProfile(id: string, patch: UpdateProfileInput): Promise<ResumeProfile>;
+
+  // Personal information (1:1)
+  getPersonalInformation(profileId: string): Promise<PersonalInformation | null>;
+  upsertPersonalInformation(
+    profileId: string,
+    patch: PersonalInformationInput,
+  ): Promise<PersonalInformation>;
+
+  // Education
+  createEducation(profileId: string, input: CreateEducationInput): Promise<EducationEntry>;
+  getEducation(entryId: string): Promise<EducationEntry | null>;
+  listEducation(profileId: string): Promise<EducationEntry[]>;
+  updateEducation(entryId: string, patch: UpdateEducationInput): Promise<EducationEntry>;
+  deleteEducation(entryId: string): Promise<void>;
+
+  // Experience
+  createExperience(profileId: string, input: CreateExperienceInput): Promise<ExperienceEntry>;
+  getExperience(entryId: string): Promise<ExperienceEntry | null>;
+  listExperience(profileId: string): Promise<ExperienceEntry[]>;
+  updateExperience(entryId: string, patch: UpdateExperienceInput): Promise<ExperienceEntry>;
+  deleteExperience(entryId: string): Promise<void>;
+
+  // Skills
+  createSkill(profileId: string, input: CreateSkillInput): Promise<Skill>;
+  getSkill(skillId: string): Promise<Skill | null>;
+  listSkills(profileId: string): Promise<Skill[]>;
+  findSkillByName(profileId: string, name: string): Promise<Skill | null>;
+  updateSkill(skillId: string, patch: UpdateSkillInput): Promise<Skill>;
+  deleteSkill(skillId: string): Promise<void>;
+
+  // Certifications
+  createCertification(profileId: string, input: CreateCertificationInput): Promise<Certification>;
+  getCertification(id: string): Promise<Certification | null>;
+  listCertifications(profileId: string): Promise<Certification[]>;
+  updateCertification(id: string, patch: UpdateCertificationInput): Promise<Certification>;
+  deleteCertification(id: string): Promise<void>;
+
+  // Languages
+  createLanguage(profileId: string, input: CreateLanguageInput): Promise<Language>;
+  getLanguage(id: string): Promise<Language | null>;
+  listLanguages(profileId: string): Promise<Language[]>;
+  updateLanguage(id: string, patch: UpdateLanguageInput): Promise<Language>;
+  deleteLanguage(id: string): Promise<void>;
+
+  // Projects
+  createProject(profileId: string, input: CreateProjectInput): Promise<Project>;
+  getProject(id: string): Promise<Project | null>;
+  listProjects(profileId: string): Promise<Project[]>;
+  updateProject(id: string, patch: UpdateProjectInput): Promise<Project>;
+  deleteProject(id: string): Promise<void>;
+
+  // Achievements
+  createAchievement(profileId: string, input: CreateAchievementInput): Promise<Achievement>;
+  getAchievement(id: string): Promise<Achievement | null>;
+  listAchievements(profileId: string): Promise<Achievement[]>;
+  updateAchievement(id: string, patch: UpdateAchievementInput): Promise<Achievement>;
+  deleteAchievement(id: string): Promise<void>;
+
+  // Conversation turns
+  createConversationTurn(
+    profileId: string,
+    input: CreateConversationTurnInput,
+  ): Promise<ConversationTurn>;
+  listConversationTurns(profileId: string): Promise<ConversationTurn[]>;
+
+  // Question state (1:1)
+  getQuestionState(profileId: string): Promise<QuestionState | null>;
+  upsertQuestionState(profileId: string, patch: QuestionStateInput): Promise<QuestionState>;
+
+  // Generated resumes
+  createGeneratedResume(
+    profileId: string,
+    input: CreateGeneratedResumeInput,
+  ): Promise<GeneratedResume>;
+  getGeneratedResume(id: string): Promise<GeneratedResume | null>;
+  getLatestGeneratedResume(profileId: string): Promise<GeneratedResume | null>;
+  updateGeneratedResume(
+    id: string,
+    patch: Partial<Pick<GeneratedResume, "pdfUrl" | "html">>,
+  ): Promise<GeneratedResume>;
+}

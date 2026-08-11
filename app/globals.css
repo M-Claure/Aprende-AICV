@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Height of the fixed-height brand header rendered by app/layout.tsx.
+       Screens that want to fill the viewport below it use `.min-h-page`. */
+    --brand-header-h: 4.25rem;
+  }
+
+  /* Native form controls default to the browser's blue; tint them brand coral
+     so radios and checkboxes match the rest of the theme. */
+  input[type="radio"],
+  input[type="checkbox"],
+  input[type="range"] {
+    accent-color: theme("colors.brand.DEFAULT");
+  }
+}
+
+@layer utilities {
+  /* `min-h-screen` minus the brand header, so full-height screens don't
+     overflow the viewport once the header is stacked above them. */
+  .min-h-page {
+    min-height: calc(100svh - var(--brand-header-h));
+  }
+}
