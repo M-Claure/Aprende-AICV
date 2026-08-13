@@ -35,6 +35,7 @@ import {
   type SuggestedSkillPayload,
 } from "./schemas";
 import { EXPERIENCE_TYPES, type ExperienceType } from "@/types";
+import { MAX_EXPERIENCE_ENTRIES } from "@/lib/config/limits";
 import { parsePersonalInformation } from "@/lib/personal-contact";
 
 /**
@@ -274,8 +275,10 @@ export class MockAIProvider implements AIProvider {
             if (parsed && typeof parsed === "object") {
               for (const [type, count] of Object.entries(parsed as Record<string, unknown>)) {
                 if (!(EXPERIENCE_TYPES as readonly string[]).includes(type)) continue;
-                const n = Math.max(0, Math.min(20, Math.floor(Number(count) || 0)));
-                for (let i = 0; i < n; i++) {
+                // Capped at the product limit, per type and in total: a hand-crafted
+                // payload must not be able to open more entries than the UI allows.
+                const n = Math.max(0, Math.min(MAX_EXPERIENCE_ENTRIES, Math.floor(Number(count) || 0)));
+                for (let i = 0; i < n && entries.length < MAX_EXPERIENCE_ENTRIES; i++) {
                   entries.push({
                     experienceType: type as ExperienceType,
                     title: null,

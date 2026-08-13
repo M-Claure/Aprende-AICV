@@ -87,6 +87,100 @@ describe("generateResume — only confirmed information", () => {
   });
 });
 
+describe("generateResume — experience order and curation", () => {
+  /** Seeds a ready profile with three dated experiences, captured out of order. */
+  async function seedThreeExperiences() {
+    const { profileId } = await seedReadyProfile();
+    const old = await store.createExperience(profileId, {
+      experienceType: "informal_work",
+      organization: "Tienda del barrio",
+      startDate: "2012",
+      endDate: "2014",
+      responsibilities: ["Atendía la caja"],
+      confirmationStatus: "confirmed",
+    });
+    const current = await store.createExperience(profileId, {
+      experienceType: "caregiving",
+      organization: "Familia",
+      startDate: "2023",
+      isCurrent: true,
+      responsibilities: ["Cuido a una persona mayor"],
+      confirmationStatus: "confirmed",
+    });
+    const middle = await store.createExperience(profileId, {
+      experienceType: "volunteering",
+      organization: "Parroquia",
+      startDate: "junio de 2018",
+      endDate: "marzo de 2021",
+      responsibilities: ["Organizaba las donaciones"],
+      confirmationStatus: "confirmed",
+    });
+    return { profileId, oldId: old.id, currentId: current.id, middleId: middle.id };
+  }
+
+  /** A provider that returns bullets only for the given entry ids. */
+  function selectiveProvider(entryIds: string[]): AIProvider {
+    return {
+      name: "selective",
+      planNextQuestion: () => {
+        throw new Error("unused");
+      },
+      normalizeAnswer: () => {
+        throw new Error("unused");
+      },
+      suggestSkills: async () => [],
+      extractInterests: async () => ({ interests: [] }),
+      proofreadResume: async () => ({ items: [], notes: [] }),
+      analyzeResume: () => {
+        throw new Error("unused");
+      },
+      async generateResumeContent(): Promise<ResumeContent> {
+        return {
+          professionalSummary: "Resumen honesto.",
+          experience: entryIds.map((id) => ({
+            entryId: id,
+            bullets: [{ text: "Atendí a clientes con responsabilidad", sourceEntryIds: [id], sourceFields: ["responsibilities"] }],
+          })),
+          education: [],
+          projects: [],
+          skillGroups: [],
+        };
+      },
+    };
+  }
+
+  it("orders experience newest first, with an ongoing role at the top", async () => {
+    const { profileId, oldId, currentId, middleId } = await seedThreeExperiences();
+    const { resume } = await generateResume(store, new MockAIProvider(), profileId);
+
+    const ids = resume.experience.map((e) => e.entryId);
+    // The undated seed entry has no dates at all, so it sorts last.
+    expect(ids.slice(0, 3)).toEqual([currentId, middleId, oldId]);
+    // The HTML follows the same order.
+    expect(resume.html.indexOf("Familia")).toBeLessThan(resume.html.indexOf("Parroquia"));
+    expect(resume.html.indexOf("Parroquia")).toBeLessThan(resume.html.indexOf("Tienda del barrio"));
+  });
+
+  it("keeps only the experiences the model selected, in chronological order", async () => {
+    const { profileId, oldId, currentId } = await seedThreeExperiences();
+    // The model judges the volunteering + the undated entry unrelated to the role.
+    const { resume } = await generateResume(store, selectiveProvider([oldId, currentId]), profileId);
+
+    expect(resume.experience.map((e) => e.entryId)).toEqual([currentId, oldId]);
+    // Excluded entries are only left off the résumé — the profile still has them.
+    expect((await store.listExperience(profileId)).length).toBe(4);
+  });
+
+  it("keeps every experience when the model selects none", async () => {
+    // A truncated or malformed generation must never erase the whole section.
+    const { profileId } = await seedThreeExperiences();
+    const { resume } = await generateResume(store, selectiveProvider([]), profileId);
+
+    expect(resume.experience.length).toBe(4);
+    expect(resume.html.toLowerCase()).toContain("experiencia");
+  });
+});
+
 describe("generateResume — never surfaces invented facts", () => {
   it("drops content tied to entries that do not exist / are not confirmed", async () => {
     const { profileId, expId } = await seedReadyProfile();

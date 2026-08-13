@@ -16,6 +16,7 @@ import type { AIProvider } from "@/lib/ai";
 import type { Analytics } from "@/lib/analytics";
 import type { Store } from "@/lib/repositories/store";
 import { Errors } from "@/lib/errors";
+import { MAX_EXPERIENCE_ENTRIES } from "@/lib/config/limits";
 import { assembleProfileState } from "@/lib/profile-state";
 import { planNextQuestion } from "@/lib/question-engine/adaptive-planner";
 import { getCatalogQuestion } from "@/lib/question-engine/question-catalog";
@@ -314,7 +315,13 @@ async function applyNormalization(
       targetExperienceId = updated.id;
       affectedEntryId = updated.id;
     } else {
-      for (const e of u.experienceEntries) {
+      // The cap is enforced HERE, at the write, not only in the counter UI: the
+      // count arrives as a free-text answer the model normalizes, so nothing
+      // upstream can guarantee how many entries come back. Extra entries are
+      // dropped rather than failing the answer — the ones that fit are still
+      // captured, and the funnel then walks the person through describing them.
+      const room = Math.max(0, MAX_EXPERIENCE_ENTRIES - list.length);
+      for (const e of u.experienceEntries.slice(0, room)) {
         const created = await store.createExperience(profileId, mapExperienceCreate(e));
         targetExperienceId = created.id;
         affectedEntryId = created.id;

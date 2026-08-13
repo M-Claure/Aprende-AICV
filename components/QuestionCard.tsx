@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { AdaptiveQuestion } from "@/lib/ai/schemas";
+import { MAX_EXPERIENCE_ENTRIES } from "@/lib/config/limits";
 import { EXPERIENCE_TYPE_OPTIONS } from "@/lib/experience-types";
 import { AiBubble, Button, Card } from "./primitives";
 
@@ -31,9 +32,19 @@ export function QuestionCard({
   // For type_counts: how many of each experience type the user has.
   const [counts, setCounts] = useState<Record<string, number>>({});
 
+  // The TOTAL across types is capped at MAX_EXPERIENCE_ENTRIES: each experience
+  // costs the person a describe question plus follow-ups, and the résumé curates
+  // rather than lists. The + button is disabled at the cap, so the ceiling is
+  // visible before it is hit instead of silently swallowing taps.
   const bump = (type: string, delta: number) =>
-    setCounts((c) => ({ ...c, [type]: Math.max(0, Math.min(20, (c[type] ?? 0) + delta)) }));
+    setCounts((c) => {
+      const current = c[type] ?? 0;
+      const total = Object.values(c).reduce((sum, n) => sum + n, 0);
+      const room = Math.max(0, MAX_EXPERIENCE_ENTRIES - total);
+      return { ...c, [type]: Math.max(0, Math.min(current + delta, current + room)) };
+    });
   const totalCounts = Object.values(counts).reduce((sum, n) => sum + n, 0);
+  const countsRemaining = Math.max(0, MAX_EXPERIENCE_ENTRIES - totalCounts);
 
   const answer = (): string => {
     switch (question.inputType) {
@@ -223,7 +234,8 @@ export function QuestionCard({
                       type="button"
                       aria-label={`Más ${label}`}
                       onClick={() => bump(type, +1)}
-                      className="flex h-8 w-8 items-center justify-center rounded-full border border-accent bg-white text-lg font-bold text-accent-dark"
+                      disabled={countsRemaining === 0}
+                      className="flex h-8 w-8 items-center justify-center rounded-full border border-accent bg-white text-lg font-bold text-accent-dark disabled:border-border disabled:text-text-secondary disabled:opacity-40"
                     >
                       +
                     </button>
@@ -234,6 +246,14 @@ export function QuestionCard({
             <p className="mt-1 text-xs text-text-secondary">
               Pon cuántas tienes de cada tipo. Deja en 0 las que no tengas. Después te preguntamos por
               cada una.
+            </p>
+            <p
+              className={`text-xs ${countsRemaining === 0 ? "font-semibold text-text-primary" : "text-text-secondary"}`}
+              aria-live="polite"
+            >
+              {countsRemaining === 0
+                ? `Ya elegiste ${MAX_EXPERIENCE_ENTRIES}. Es el máximo. Si quieres cambiar una, aprieta el −.`
+                : `Puedes elegir ${MAX_EXPERIENCE_ENTRIES} en total. Te quedan ${countsRemaining}.`}
             </p>
           </div>
         );

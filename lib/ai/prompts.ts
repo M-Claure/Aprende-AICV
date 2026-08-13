@@ -5,6 +5,7 @@
  * are enforced in code too (schemas, status transitions, generation filters) —
  * the prompt is the first line of defense, not the only one.
  */
+import { MAX_EXPERIENCE_ENTRIES } from "@/lib/config/limits";
 import type {
   AnalyzeResumeParams,
   NormalizeAnswerParams,
@@ -110,6 +111,7 @@ Tu tarea: extraer ÚNICAMENTE la información que la persona realmente dijo y es
 - En "suggestedSkills" incluye habilidades SOLO si hay evidencia clara en la respuesta; cada una con "evidence" citando lo que dijo la persona.
 - Coloca lo extraído en "updates". Incluye SOLO los campos relevantes a esta respuesta; omite el resto.
 - Para IDIOMAS: normaliza el nombre del idioma en español (p.ej. "English" → "Inglés") y clasifica el nivel en uno de: "basico", "intermedio", "avanzado", "nativo". Interpreta descripciones libres: "perfecto"/"lo hablo perfectamente"/"native"/"bilingüe" → "nativo"; "profesional"/"business"/"fluido"/"avanzado" → "avanzado"; "intermedio"/"conversacional" → "intermedio"; "básico"/"poco" → "basico".
+- Si la respuesta es un objeto JSON de conteos por tipo de experiencia (p.ej. {"caregiving":2,"volunteering":1}), devuelve en "experienceEntries" ESE número de entradas de cada tipo, VACÍAS (solo "experienceType"; sin title, organization ni descripción): más adelante se le pregunta por cada una. Nunca devuelvas más de ${MAX_EXPERIENCE_ENTRIES} entradas en total.
 - Para CERTIFICADOS/CURSOS: separa cada certificado en su propio objeto. Pon en "name" el título del certificado o curso (sin la institución ni el año), en "issuingOrganization" la entidad que lo emitió (p.ej. Google, Coursera, SENA) si se menciona, y en "issueDate" el año o fecha si se menciona. No inventes emisor ni fecha si la persona no los dio.
 
 ${JSON_ONLY} Usa EXACTAMENTE estos nombres de campo. Esquema AnswerNormalization:
@@ -210,8 +212,16 @@ ${guidelinesBlock(guidelines)}
 Datos confirmados:
 ${JSON.stringify(data, null, 0)}
 
+SELECCIÓN DE EXPERIENCIAS (tú decides cuáles entran):
+- Las experiencias vienen ordenadas de la MÁS RECIENTE a la más antigua. Devuélvelas en ese MISMO orden.
+- Incluye todas las experiencias que ayuden a conseguir el puesto objetivo ("targetRole" / "careerGoal"). Para OMITIR una, simplemente NO devuelvas su bloque (no la menciones en ningún otro lado). Omitir no borra nada: la persona conserva su información.
+- Omite SOLO cuando la experiencia claramente no aporta nada para ese puesto. Ante la duda, INCLÚYELA.
+- Un trabajo informal, el cuidado de personas, un voluntariado, un negocio familiar o un proyecto SÍ aportan cuando muestran habilidades transferibles (responsabilidad, atención al cliente, organización, manejo de dinero, puntualidad, trabajo en equipo). NUNCA omitas una experiencia por ser informal, no remunerada o de poca duración.
+- Si la persona tiene 1 o 2 experiencias, inclúyelas TODAS.
+
 Instrucciones de redacción (objetivo: un CV pulido y profesional, SIN inventar):
 - "professionalSummary": 2-4 frases atractivas y profesionales que resalten el perfil, basadas SOLO en estos datos.
+- Dedica MÁS viñetas y mejor redacción a las experiencias más pertinentes para el puesto objetivo.
 - Redacta cada experiencia con VARIAS viñetas (idealmente 3-5 cuando haya suficiente información), aprovechando responsabilidades, logros, herramientas, personas atendidas y métricas. Es correcto convertir un hecho en una viñeta bien redactada (p.ej. "usaba Excel" → "Manejo de Microsoft Excel para organizar información").
 - Empieza cada viñeta con un verbo de acción fuerte (Gestioné, Atendí, Organicé, Coordiné, Resolví, Optimicé…) y un tono orientado a logros.
 - Presenta la experiencia de la forma MÁS FUERTE y profesional posible, PERO sin inventar ni exagerar hechos: no agregues métricas, empleadores, herramientas ni logros que la persona no mencionó. Conserva las cantidades aproximadas tal cual.

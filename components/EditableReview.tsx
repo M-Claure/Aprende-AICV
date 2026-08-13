@@ -15,7 +15,7 @@ import {
   ENTRY_TEXT_CHAR_LIMIT,
   TARGET_ROLE_CHAR_LIMIT,
 } from "@/lib/answer-limits";
-import { MAX_RESUME_ITERATIONS } from "@/lib/config/limits";
+import { MAX_EXPERIENCE_ENTRIES, MAX_RESUME_ITERATIONS } from "@/lib/config/limits";
 import { Button, Card, InstructionBanner, Spinner } from "./primitives";
 
 interface ProfileData {
@@ -135,6 +135,12 @@ export function EditableReview({
       {/* Experiencia */}
       <Section
         title="Experiencia"
+        addDisabled={saving || state.experience.length >= MAX_EXPERIENCE_ENTRIES}
+        hint={
+          state.experience.length >= MAX_EXPERIENCE_ENTRIES
+            ? `Puedes tener ${MAX_EXPERIENCE_ENTRIES} experiencias. Es el máximo. Borra una si quieres agregar otra.`
+            : undefined
+        }
         onAdd={() =>
           withSave(() => api.addExperience(profileId, { experienceType: "other", rawDescription: "Nueva experiencia" }))
         }
@@ -211,15 +217,35 @@ export function EditableReview({
 }
 
 // ── Section shell ──
-function Section({ title, onAdd, children }: { title: string; onAdd: () => void; children: React.ReactNode }) {
+function Section({
+  title,
+  onAdd,
+  addDisabled = false,
+  hint,
+  children,
+}: {
+  title: string;
+  onAdd: () => void;
+  /** Blocks "+ Agregar" (e.g. the experience cap is reached). */
+  addDisabled?: boolean;
+  /** Short Spanish explanation shown when adding is blocked. */
+  hint?: string;
+  children: React.ReactNode;
+}) {
   return (
     <Card>
       <div className="mb-2 flex items-center justify-between">
         <h3 className="text-sm font-semibold">{title}</h3>
-        <button type="button" onClick={onAdd} className="text-xs font-semibold text-accent-dark hover:underline">
+        <button
+          type="button"
+          onClick={onAdd}
+          disabled={addDisabled}
+          className="text-xs font-semibold text-accent-dark hover:underline disabled:text-text-secondary disabled:no-underline disabled:opacity-50"
+        >
           + Agregar
         </button>
       </div>
+      {hint && <p className="mb-2 text-xs text-text-secondary">{hint}</p>}
       <div className="flex flex-col gap-3">{children}</div>
     </Card>
   );

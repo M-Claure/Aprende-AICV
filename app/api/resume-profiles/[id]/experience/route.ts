@@ -1,3 +1,5 @@
+import { MAX_EXPERIENCE_ENTRIES } from "@/lib/config/limits";
+import { Errors } from "@/lib/errors";
 import { created, handleRoute, readJson } from "@/lib/http";
 import { getRequestContext, loadOwnedProfile } from "@/lib/request-context";
 import { CreateExperienceBody } from "@/lib/validation/api-schemas";
@@ -10,6 +12,15 @@ export async function POST(request: Request, { params }: { params: { id: string 
     const { userId, store, analytics } = await getRequestContext();
     await loadOwnedProfile(store, params.id, userId);
     const body = CreateExperienceBody.parse(await readJson(request));
+
+    // Hard cap, enforced server-side so the Review screen's "+ Agregar" button is
+    // a courtesy and not the actual gate.
+    const existing = await store.listExperience(params.id);
+    if (existing.length >= MAX_EXPERIENCE_ENTRIES) {
+      throw Errors.conflict(
+        `Solo puedes tener ${MAX_EXPERIENCE_ENTRIES} experiencias. Borra una si quieres agregar otra.`,
+      );
+    }
 
     const entry = await store.createExperience(params.id, {
       ...body,

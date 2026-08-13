@@ -9,6 +9,7 @@
  */
 import type { ResumeProfileState, ResumeSection } from "@/types";
 import type { InputType } from "@/lib/ai/schemas";
+import { MAX_EXPERIENCE_ENTRIES } from "@/lib/config/limits";
 import { isExperienceUndescribed, labelForType } from "@/lib/experience-types";
 
 export interface CatalogQuestion {
@@ -218,7 +219,7 @@ export const QUESTION_CATALOG: CatalogQuestion[] = [
     id: "experience_type_counts",
     section: "experience",
     text: "¿Qué tipos de experiencia has tenido y cuántas de cada una? Pon el número de cada tipo.",
-    supportingText: "No necesitas un empleo formal: cuidar, ayudar en un negocio o un proyecto también cuentan.",
+    supportingText: `No necesitas un empleo formal: cuidar, ayudar en un negocio o un proyecto también cuentan. Puedes contar hasta ${MAX_EXPERIENCE_ENTRIES} experiencias en total: elige las ${MAX_EXPERIENCE_ENTRIES} más importantes.`,
     intent: "Capturar el tipo y la cantidad de experiencias para preguntar por cada una.",
     inputType: "type_counts",
     required: false,

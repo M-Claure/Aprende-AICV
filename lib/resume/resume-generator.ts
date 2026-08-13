@@ -21,6 +21,7 @@ import type { Store } from "@/lib/repositories/store";
 import { Errors } from "@/lib/errors";
 import { assembleProfileState } from "@/lib/profile-state";
 import { buildSkillGroups, traceBullets } from "./source-tracing";
+import { sortExperienceNewestFirst } from "./experience-order";
 import { getResumeGuidelines } from "./guidelines";
 import { renderResumeHtml, type ResumeRenderModel } from "./resume-renderer";
 
@@ -58,8 +59,11 @@ export async function generateResume(
       store.listSkills(profileId),
     ]);
 
-  const experience = allExperience.filter((e) =>
-    RESUME_ELIGIBLE_CONFIRMATIONS.includes(e.confirmationStatus),
+  // Newest first — deterministically, in code. The model receives them already
+  // ordered and its blocks are re-mapped onto this order below, so the résumé is
+  // always reverse-chronological no matter what order the model answers in.
+  const experience = sortExperienceNewestFirst(
+    allExperience.filter((e) => RESUME_ELIGIBLE_CONFIRMATIONS.includes(e.confirmationStatus)),
   );
   const education = allEducation.filter((e) =>
     RESUME_ELIGIBLE_CONFIRMATIONS.includes(e.confirmationStatus),
@@ -120,7 +124,26 @@ export async function generateResume(
   const contentEduById = new Map(content.education.map((e) => [e.entryId, e]));
   const contentProjById = new Map(content.projects.map((p) => [p.entryId, p]));
 
-  const experienceBlocks: GeneratedExperienceBlock[] = experience.map((e) => ({
+  /*
+   * The model CURATES the experience section: the generation prompt tells it to
+   * include every experience that helps the target role and to omit one only when
+   * it clearly does nothing for it — omitting simply by not returning that
+   * entryId. So an entry with no surviving bullets is a deliberate exclusion, not
+   * an empty shell to render with a bare title.
+   *
+   * Guard: if that would leave the section empty (a truncated or malformed
+   * generation), every entry is kept. Selection may only ever narrow what the
+   * person confirmed — it never touches stored data, so an excluded experience
+   * stays in the profile, editable in Review, and can come back on a regenerate.
+   */
+  const tracedExperience = experience.map((e) => ({
+    entry: e,
+    bullets: traceBullets(contentExpById.get(e.id)?.bullets ?? [], experienceIds, e.id),
+  }));
+  const selectedExperience = tracedExperience.filter((t) => t.bullets.length > 0);
+  const includedExperience = selectedExperience.length > 0 ? selectedExperience : tracedExperience;
+
+  const experienceBlocks: GeneratedExperienceBlock[] = includedExperience.map(({ entry: e, bullets }) => ({
     entryId: e.id,
     title: e.title,
     organization: e.organization,
@@ -128,7 +151,7 @@ export async function generateResume(
     startDate: e.startDate,
     endDate: e.endDate,
     isCurrent: e.isCurrent,
-    bullets: traceBullets(contentExpById.get(e.id)?.bullets ?? [], experienceIds, e.id),
+    bullets,
   }));
 
   const educationBlocks: GeneratedEducationBlock[] = education.map((e) => ({
