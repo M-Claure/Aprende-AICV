@@ -5,7 +5,11 @@
  * are enforced in code too (schemas, status transitions, generation filters) —
  * the prompt is the first line of defense, not the only one.
  */
-import { MAX_EXPERIENCE_ENTRIES } from "@/lib/config/limits";
+import {
+  MAX_EXPERIENCE_ENTRIES,
+  MAX_FEEDBACK_QUESTIONS_PER_ITERATION,
+} from "@/lib/config/limits";
+import type { ResumeSection } from "@/types";
 import type {
   AnalyzeResumeParams,
   NormalizeAnswerParams,
@@ -97,39 +101,98 @@ Instrucciones:
 ${JSON_ONLY} Debe cumplir el esquema PlannerDecision: { questionId, section, questionText, supportingText?, reasonForAsking?, exampleAnswer?, contextUsed[], nextAction }.`;
 }
 
-export function buildNormalizerPrompt(params: NormalizeAnswerParams): string {
-  return `La persona respondió una pregunta de la sección "${params.section}".
+/**
+ * The `updates` fields for ONE section, plus the extra rules that section needs.
+ *
+ * The prompt used to carry all eight sections' schemas on every call: an answer
+ * about an experience shipped the field lists for education, projects,
+ * certifications, languages and achievements too, and the language-level rules, and
+ * the certificate rules. That static block ran ~1,100 tokens and this is the most
+ * repeated prompt in the product — roughly 26 calls per résumé once the improvement
+ * loop's deep-dives are counted — so most of those tokens were paid for on every
+ * call to describe fields the answer could not possibly fill.
+ *
+ * Each entry below is what that section can actually write. `career_goal` and
+ * `review` need none: nothing in `updates` belongs to them.
+ */
+const SECTION_SCHEMAS: Partial<Record<ResumeSection, { fields: string; rules?: string }>> = {
+  personal_information: {
+    fields: `"personalInformation": { "firstName": "…", "lastName": "…", "city": "…", "state": "…", "country": "…", "phone": "…", "email": "…", "linkedInUrl": "…", "portfolioUrl": "…" }`,
+  },
+  education: {
+    fields: `"educationEntries": [{ "institution": "…", "credential": "…", "fieldOfStudy": "…", "startDate": "…", "endDate": "…", "isCurrent": false, "relevantCoursework": ["…"] }]`,
+    rules: `- Separa cada estudio en su propio objeto. Pon en "credential" SOLO el nivel o título, sin la escuela ni la frase completa (p.ej. "Secundaria", "Curso de administración"); en "institution" el nombre de la escuela si lo menciona; en "fieldOfStudy" el área de estudio. Ejemplo: "Terminé la secundaria en el Colegio Nacional y estudié seis meses de administración en el Instituto Local" → dos objetos: {credential:"Secundaria", institution:"Colegio Nacional"} y {credential:"Curso de administración", institution:"Instituto Local", fieldOfStudy:"Administración"}. No inventes escuela ni fecha.`,
+  },
+  experience: {
+    fields: `"experienceEntries": [{ "experienceType": "formal_employment|self_employment|business_owner|freelance|informal_work|family_business|volunteering|internship|school_project|caregiving|personal_project|other", "title": "…", "organization": "…", "startDate": "…", "endDate": "…", "isCurrent": false, "rawDescription": "…", "responsibilities": ["…"], "accomplishments": ["…"], "tools": ["…"], "peopleServed": "…", "metrics": ["…"] }]`,
+    rules: `- Si la respuesta es un objeto JSON de conteos por tipo de experiencia (p.ej. {"caregiving":2,"volunteering":1}), devuelve en "experienceEntries" ESE número de entradas de cada tipo, VACÍAS (solo "experienceType"; sin title, organization ni descripción): más adelante se le pregunta por cada una. Nunca devuelvas más de ${MAX_EXPERIENCE_ENTRIES} entradas en total. Si el objeto viene vacío ({}), la persona no tiene ninguna experiencia de esos tipos: devuelve "updates" vacío, sin ninguna entrada.
+- Conserva la redacción original de la persona en "rawDescription".`,
+  },
+  projects: {
+    fields: `"projects": [{ "name": "…", "projectType": "personal|academic|professional|volunteer|other", "description": "…", "responsibilities": ["…"], "outcomes": ["…"], "tools": ["…"] }]`,
+  },
+  certifications: {
+    fields: `"certifications": [{ "name": "…", "issuingOrganization": "…", "issueDate": "…" }]`,
+    rules: `- Separa cada certificado en su propio objeto. Pon en "name" el título del certificado o curso (sin la institución ni el año), en "issuingOrganization" la entidad que lo emitió (p.ej. Google, Coursera, SENA) si se menciona, y en "issueDate" el año o fecha si se menciona. No inventes emisor ni fecha si la persona no los dio.`,
+  },
+  languages: {
+    fields: `"languages": [{ "name": "Español", "speakingLevel": "basico|intermedio|avanzado|nativo", "readingLevel": "…", "writingLevel": "…" }]`,
+    rules: `- Normaliza el nombre del idioma en español (p.ej. "English" → "Inglés") y clasifica el nivel en uno de: "basico", "intermedio", "avanzado", "nativo". Interpreta descripciones libres: "perfecto"/"lo hablo perfectamente"/"native"/"bilingüe" → "nativo"; "profesional"/"business"/"fluido"/"avanzado" → "avanzado"; "intermedio"/"conversacional" → "intermedio"; "básico"/"poco" → "basico".`,
+  },
+  achievements: {
+    fields: `"achievements": [{ "title": "…", "organization": "…", "date": "…", "description": "…" }]`,
+  },
+  skills: {
+    fields: `"careerGoal": "…", "targetRole": "…"`,
+  },
+  career_goal: {
+    fields: `"careerGoal": "…", "targetRole": "…"`,
+  },
+};
 
-Pregunta: ${params.questionText}
-Respuesta textual de la persona: """${params.rawAnswer}"""
-
-Tu tarea: extraer ÚNICAMENTE la información que la persona realmente dijo y estructurarla.
+/**
+ * The half of the normalizer prompt that does not depend on the answer.
+ *
+ * Split out so the stable text comes FIRST and the person's answer LAST. That
+ * ordering is what makes the block cacheable: prompt caching matches on a prefix,
+ * and with the question and answer at the top (as they were) every call had a
+ * different prefix and nothing could ever be reused. Caching still has to be turned
+ * on — see `AnthropicProvider.normalizeAnswer` — but the shape now allows it.
+ */
+export function buildNormalizerSystemPrompt(section: ResumeSection): string {
+  const schema = SECTION_SCHEMAS[section];
+  const sectionRules = schema?.rules ? `\n${schema.rules}` : "";
+  const updates = schema ? `\n  "updates": {\n    ${schema.fields}\n  }` : `\n  "updates": {}`;
+  return `Tu tarea: extraer ÚNICAMENTE la información que la persona realmente dijo en su respuesta y estructurarla como JSON.
 - No agregues datos que no estén en la respuesta.
 - Conserva valores aproximados tal cual (no los conviertas en exactos).
 - En "interpretationSummary" resume en español lo que entendiste.
 - Marca "needsConfirmation": true si hiciste alguna interpretación material que la persona deba confirmar.
 - En "suggestedSkills" incluye habilidades SOLO si hay evidencia clara en la respuesta; cada una con "evidence" citando lo que dijo la persona.
 - Coloca lo extraído en "updates". Incluye SOLO los campos relevantes a esta respuesta; omite el resto.
-- Para IDIOMAS: normaliza el nombre del idioma en español (p.ej. "English" → "Inglés") y clasifica el nivel en uno de: "basico", "intermedio", "avanzado", "nativo". Interpreta descripciones libres: "perfecto"/"lo hablo perfectamente"/"native"/"bilingüe" → "nativo"; "profesional"/"business"/"fluido"/"avanzado" → "avanzado"; "intermedio"/"conversacional" → "intermedio"; "básico"/"poco" → "basico".
-- Si la respuesta es un objeto JSON de conteos por tipo de experiencia (p.ej. {"caregiving":2,"volunteering":1}), devuelve en "experienceEntries" ESE número de entradas de cada tipo, VACÍAS (solo "experienceType"; sin title, organization ni descripción): más adelante se le pregunta por cada una. Nunca devuelvas más de ${MAX_EXPERIENCE_ENTRIES} entradas en total.
-- Para CERTIFICADOS/CURSOS: separa cada certificado en su propio objeto. Pon en "name" el título del certificado o curso (sin la institución ni el año), en "issuingOrganization" la entidad que lo emitió (p.ej. Google, Coursera, SENA) si se menciona, y en "issueDate" el año o fecha si se menciona. No inventes emisor ni fecha si la persona no los dio.
+- Si la respuesta es una negación o no aporta información (p.ej. "no", "ninguno", "nada", "no sé", "no recuerdo", "no aplica"), NO inventes nada y NO la guardes como contenido: devuelve "updates" vacío ({}) y di en "interpretationSummary" que no había información nueva. Las preguntas de experiencia no se pueden omitir, así que una negación es la forma normal de decir "aquí no hay nada".${sectionRules}
 
 ${JSON_ONLY} Usa EXACTAMENTE estos nombres de campo. Esquema AnswerNormalization:
 {
   "interpretationSummary": "…",
   "needsConfirmation": false,
-  "suggestedSkills": [{ "name": "…", "category": "…", "evidence": "…" }],
-  "updates": {
-    "careerGoal": "…", "targetRole": "…",
-    "personalInformation": { "firstName": "…", "lastName": "…", "city": "…", "state": "…", "country": "…", "phone": "…", "email": "…", "linkedInUrl": "…", "portfolioUrl": "…" },
-    "educationEntries": [{ "institution": "…", "credential": "…", "fieldOfStudy": "…", "startDate": "…", "endDate": "…", "isCurrent": false, "relevantCoursework": ["…"] }],
-    "experienceEntries": [{ "experienceType": "formal_employment|self_employment|business_owner|freelance|informal_work|family_business|volunteering|internship|school_project|caregiving|personal_project|other", "title": "…", "organization": "…", "startDate": "…", "endDate": "…", "isCurrent": false, "rawDescription": "…", "responsibilities": ["…"], "accomplishments": ["…"], "tools": ["…"], "peopleServed": "…", "metrics": ["…"] }],
-    "projects": [{ "name": "…", "projectType": "personal|academic|professional|volunteer|other", "description": "…", "responsibilities": ["…"], "outcomes": ["…"], "tools": ["…"] }],
-    "certifications": [{ "name": "…", "issuingOrganization": "…", "issueDate": "…" }],
-    "languages": [{ "name": "Español", "speakingLevel": "basico|intermedio|avanzado|nativo", "readingLevel": "…", "writingLevel": "…" }],
-    "achievements": [{ "title": "…", "organization": "…", "date": "…", "description": "…" }]
-  }
+  "suggestedSkills": [{ "name": "…", "category": "…", "evidence": "…" }],${updates}
 }`;
+}
+
+/** The variable half: the question asked and what the person actually wrote. */
+export function buildNormalizerUserPrompt(params: NormalizeAnswerParams): string {
+  return `Sección: "${params.section}"
+Pregunta: ${params.questionText}
+Respuesta textual de la persona: """${params.rawAnswer}"""`;
+}
+
+/**
+ * Whole-prompt form, kept for callers that want one string (and for the tests that
+ * assert the two halves compose). The provider sends the halves separately.
+ */
+export function buildNormalizerPrompt(params: NormalizeAnswerParams): string {
+  return `${buildNormalizerSystemPrompt(params.section)}\n\n${buildNormalizerUserPrompt(params)}`;
 }
 
 export function buildSkillSuggestionPrompt(params: SuggestSkillsParams): string {
@@ -219,10 +282,18 @@ SELECCIÓN DE EXPERIENCIAS (tú decides cuáles entran):
 - Un trabajo informal, el cuidado de personas, un voluntariado, un negocio familiar o un proyecto SÍ aportan cuando muestran habilidades transferibles (responsabilidad, atención al cliente, organización, manejo de dinero, puntualidad, trabajo en equipo). NUNCA omitas una experiencia por ser informal, no remunerada o de poca duración.
 - Si la persona tiene 1 o 2 experiencias, inclúyelas TODAS.
 
+LÍMITE DE UNA PÁGINA (obligatorio — tú decides qué conservar y qué quitar):
+- El currículum COMPLETO debe caber en UNA sola página. Tú decides, con tu criterio, qué conservar y qué recortar para lograrlo.
+- Presupuesto aproximado de una página: "professionalSummary" de 2 a 3 frases; entre 10 y 14 viñetas EN TOTAL sumando experiencia y proyectos; 1 o 2 líneas por entrada de educación; de 2 a 4 grupos de habilidades.
+- MÍNIMO POR EXPERIENCIA: cada experiencia que incluyas debe llevar AL MENOS 2 viñetas. Una experiencia con una sola viñeta se ve vacía y no ayuda a la persona. Si el presupuesto no alcanza para dar 2 viñetas a todas, es mejor OMITIR la experiencia menos pertinente y describir bien las demás que dejar todas a medias.
+- Si no cabe todo, recorta EN ESTE ORDEN: (1) viñetas repetidas o que aportan poco; (2) detalles de educación; (3) viñetas de proyectos; (4) viñetas de las experiencias menos pertinentes o más antiguas, siempre respetando el mínimo de 2; (5) solo al final, omite por completo una experiencia claramente no pertinente, siguiendo las reglas de selección de arriba.
+- NUNCA recortes, ni para ahorrar espacio: el resumen profesional por debajo de 2 frases, ni las viñetas de la experiencia más pertinente para el puesto.
+- Prefiere pocas viñetas bien escritas antes que muchas viñetas cortas y repetidas.
+
 Instrucciones de redacción (objetivo: un CV pulido y profesional, SIN inventar):
-- "professionalSummary": 2-4 frases atractivas y profesionales que resalten el perfil, basadas SOLO en estos datos.
+- "professionalSummary": 2-3 frases atractivas y profesionales que resalten el perfil, basadas SOLO en estos datos.
 - Dedica MÁS viñetas y mejor redacción a las experiencias más pertinentes para el puesto objetivo.
-- Redacta cada experiencia con VARIAS viñetas (idealmente 3-5 cuando haya suficiente información), aprovechando responsabilidades, logros, herramientas, personas atendidas y métricas. Es correcto convertir un hecho en una viñeta bien redactada (p.ej. "usaba Excel" → "Manejo de Microsoft Excel para organizar información").
+- Redacta cada experiencia con varias viñetas, ajustándote al presupuesto de una página: con 1 o 2 experiencias puedes dar 3-5 viñetas a cada una; con 3 o 4 experiencias, da 2-3 a cada una. Aprovecha responsabilidades, logros, herramientas, personas atendidas y métricas. Es correcto convertir un hecho en una viñeta bien redactada (p.ej. "usaba Excel" → "Manejo de Microsoft Excel para organizar información").
 - Empieza cada viñeta con un verbo de acción fuerte (Gestioné, Atendí, Organicé, Coordiné, Resolví, Optimicé…) y un tono orientado a logros.
 - Presenta la experiencia de la forma MÁS FUERTE y profesional posible, PERO sin inventar ni exagerar hechos: no agregues métricas, empleadores, herramientas ni logros que la persona no mencionó. Conserva las cantidades aproximadas tal cual.
 - ELIMINA REDUNDANCIAS: no repitas la misma idea en varias viñetas ni entre secciones; fusiona lo repetido y pule la redacción y el formato en cada generación.
@@ -288,7 +359,7 @@ ${JSON.stringify(params.gapHints, null, 0)}
 Tu tarea:
 - "overallImpression": 1-2 frases honestas y directas sobre el estado del currículum (qué le falta para ser competitivo).
 - "strengths": 2-4 fortalezas reales del currículum actual.
-- "improvements": preguntas de seguimiento para mejorar el currículum. Cada "questionId" DEBE salir de esta lista: ${JSON.stringify(params.allowedQuestionIds)}.
+- "improvements": preguntas de seguimiento para mejorar el currículum. Devuelve como MÁXIMO ${MAX_FEEDBACK_QUESTIONS_PER_ITERATION}, las más importantes — el sistema solo muestra ${MAX_FEEDBACK_QUESTIONS_PER_ITERATION} por ronda, así que las demás se descartan. Cada "questionId" DEBE salir de esta lista: ${JSON.stringify(params.allowedQuestionIds)}.
   * Para PREGUNTAS PERSONALIZADAS sobre una experiencia o proyecto concreto, usa "experience_deepen" o "project_deepen" e incluye el "entryId" EXACTO de la entrada correspondiente (de la lista de arriba). Haz preguntas MUY específicas que mencionen el proyecto/experiencia por su nombre. Ejemplo: si hay un proyecto "Simulador Monte Carlo para VOO", pregunta qué lenguajes/herramientas usó, cómo modeló los escenarios y qué resultados obtuvo.
   * Para secciones faltantes (idiomas, intereses, habilidades, etc.), usa el questionId de sección correspondiente (sin entryId).
   * Prioriza profundizar en experiencias/proyectos con poco detalle y señalar cualquier redundancia.

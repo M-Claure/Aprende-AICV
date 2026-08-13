@@ -55,3 +55,22 @@ export function isExperienceUndescribed(e: {
 }): boolean {
   return e.responsibilities.length === 0 && !(e.rawDescription && e.rawDescription.trim().length > 0);
 }
+
+/**
+ * An entry is "undated" when nothing places it in time — no start, no end, and not
+ * marked current. The résumé orders experience newest-first, so an undated entry
+ * can only sink to the bottom in capture order.
+ *
+ * Shared deliberately: the question catalog uses it to decide WHICH experience to
+ * ask about, and the answer pipeline uses it to decide which entry that answer
+ * belongs to. Two copies of this predicate would let the question name one
+ * experience while the answer landed on another.
+ */
+export function isExperienceUndated(e: {
+  startDate: string | null;
+  endDate: string | null;
+  isCurrent: boolean;
+}): boolean {
+  const filled = (v: string | null) => typeof v === "string" && v.trim().length > 0;
+  return !filled(e.startDate) && !filled(e.endDate) && !e.isCurrent;
+}

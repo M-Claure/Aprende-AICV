@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { computeCompleteness } from "@/lib/question-engine/completeness-engine";
 import { buildCandidates } from "@/lib/question-engine/question-prioritizer";
+import { QUESTION_CATALOG, getCatalogQuestion } from "@/lib/question-engine/question-catalog";
 import { planNextQuestion } from "@/lib/question-engine/adaptive-planner";
 import { MockAIProvider } from "@/lib/ai/mock-provider";
 import type { ResumeProfileState } from "@/types";
@@ -88,6 +89,56 @@ describe("buildCandidates — skip behavior (spec §7)", () => {
     // career goal is critical; skipping it must not permanently remove it.
     const s = state({ skippedQuestionIds: ["career_goal_target"] });
     expect(ids(s)).toContain("career_goal_target");
+  });
+});
+
+describe("experience questions are never skippable", () => {
+  it("no experience catalog question offers a skip", () => {
+    const skippable = QUESTION_CATALOG.filter((q) => q.section === "experience" && q.allowSkip);
+    expect(skippable.map((q) => q.id)).toEqual([]);
+  });
+
+  it("still allows skipping questions outside the experience section", () => {
+    // Guards against a blanket allowSkip:false sweep — optional sections keep it.
+    expect(getCatalogQuestion("certifications_any")?.allowSkip).toBe(true);
+    expect(getCatalogQuestion("personal_location")?.allowSkip).toBe(true);
+  });
+
+  it("planNextQuestion reports allowSkip:false for the counter step", async () => {
+    const s = state({
+      careerGoal: "Recepcionista",
+      personalInformation: personalState({ firstName: "Rosa", hasEmail: true }),
+      education: [educationState({ institution: "Instituto", credential: "Técnico" })],
+    });
+    const q = await planNextQuestion(s, provider);
+    expect(q.section).toBe("experience");
+    expect(q.allowSkip).toBe(false);
+  });
+
+  it("stops asking about experience once the person answered the counter with none", () => {
+    // "Todo en 0" is the escape hatch that replaces the missing skip button; the
+    // describe question must not then trap them on an experience they don't have.
+    const s = state({
+      careerGoal: "Recepcionista",
+      personalInformation: personalState({ firstName: "Rosa", hasEmail: true }),
+      education: [educationState({ institution: "Instituto", credential: "Técnico" })],
+      experience: [],
+      answeredQuestionIds: ["experience_type_counts"],
+    });
+    const order = ids(s);
+    expect(order).not.toContain("experience_add");
+    expect(order).not.toContain("experience_type_counts");
+    expect(order.length).toBeGreaterThan(0); // the funnel still has somewhere to go
+  });
+
+  it("keeps offering the describe step while an entry is still undescribed", () => {
+    const s = state({
+      careerGoal: "Recepcionista",
+      personalInformation: personalState({ firstName: "Rosa", hasEmail: true }),
+      experience: [experienceState({ responsibilities: [], rawDescription: null })],
+      answeredQuestionIds: ["experience_type_counts"],
+    });
+    expect(ids(s)).toContain("experience_add");
   });
 });
 

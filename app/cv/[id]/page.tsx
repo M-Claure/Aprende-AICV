@@ -6,6 +6,7 @@ import type { AdaptiveQuestion } from "@/lib/ai/schemas";
 import type { ResumeProfileState } from "@/types";
 import { api, ApiError, type AnswerPayload } from "@/lib/client/api";
 import { answerCharLimitForQuestion } from "@/lib/answer-limits";
+import { MAX_EXPERIENCE_ENTRIES } from "@/lib/config/limits";
 import { InstructionBanner, ProgressBar, Spinner } from "@/components/primitives";
 import { QuestionCard } from "@/components/QuestionCard";
 import { SkillConfirm } from "@/components/SkillConfirm";
@@ -15,7 +16,14 @@ import { stepInstruction } from "@/components/instructions";
 
 type Phase = "loading" | "asking" | "generating" | "done" | "error";
 
-/** A fresh "add another experience" question (client-initiated, creates a new entry). */
+/**
+ * A fresh "add another experience" question (client-initiated, creates a new entry).
+ *
+ * Deliberately TYPE-LESS, unlike the catalog's describe question, which names the
+ * position and type the person counted ("Experiencia 2 de 3: tu voluntariado").
+ * Nobody chose a type for this one, so the wording stays broad and the entry is
+ * stored as `other` until the description tells us what it was.
+ */
 const NEW_EXPERIENCE_QUESTION: AdaptiveQuestion = {
   questionId: "experience_add",
   section: "experience",
@@ -23,7 +31,9 @@ const NEW_EXPERIENCE_QUESTION: AdaptiveQuestion = {
   supportingText: "Trabajo, negocio, voluntariado, cuidado de personas, proyecto… todo cuenta.",
   inputType: "long_text",
   required: false,
-  allowSkip: true,
+  // Matches the catalog: no experience question offers "Omitir". Reaching this one
+  // is an explicit choice ("Agregar otra experiencia"), and "← Volver" undoes it.
+  allowSkip: false,
   // Same limit the server will enforce for this questionId.
   charLimit: answerCharLimitForQuestion("experience_add"),
   contextUsed: [],
@@ -149,6 +159,12 @@ export default function CvFlowPage({ params }: { params: { id: string } }) {
           timeSpentMs: startedAt ? Date.now() - startedAt : undefined,
           deviceCategory: deviceCategory(),
           targetEntryId,
+          // This exact object is only ever set by "Agregar otra experiencia", so
+          // identity tells the server the answer is an ADDITIONAL experience and
+          // must not be absorbed by an entry from the counter step that is still
+          // waiting to be described. A back-edit still wins: the server prefers
+          // `targetEntryId` when both arrive.
+          forceNewEntry: question === NEW_EXPERIENCE_QUESTION || undefined,
           ...payload,
         });
         applyResult(res);
@@ -286,9 +302,12 @@ export default function CvFlowPage({ params }: { params: { id: string } }) {
         ))}
       </div>
 
+      {/* Hidden at the cap: the server would create nothing, so offering it would
+          be a button that silently does nothing. */}
       {question &&
         question.inputType !== "review" &&
-        (state?.experience.length ?? 0) > 0 && (
+        (state?.experience.length ?? 0) > 0 &&
+        (state?.experience.length ?? 0) < MAX_EXPERIENCE_ENTRIES && (
           <button
             type="button"
             onClick={addAnotherExperience}

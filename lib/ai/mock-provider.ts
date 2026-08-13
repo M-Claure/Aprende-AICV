@@ -226,9 +226,20 @@ export class MockAIProvider implements AIProvider {
 
     switch (params.section) {
       case "career_goal": {
-        updates.careerGoal = raw;
-        updates.targetRole = truncate(raw, 120);
-        summary = `Tu objetivo profesional es: "${truncate(raw, 120)}".`;
+        // Each question fills ONLY the field it actually asks about. Writing the
+        // same answer into both is what made the Review screen show the identical
+        // text twice — once as "Puesto deseado", once as "Objetivo (descripción)" —
+        // and left nothing for the person to actually write in the second field.
+        if (params.questionId === "career_goal_unknown") {
+          // The "I'm not sure what job I want" path: a narrative about what the
+          // person enjoys or has done. That IS the objective; it is not a job title.
+          updates.careerGoal = raw;
+          summary = `Anoté lo que me contaste sobre lo que buscas: "${truncate(raw, 120)}".`;
+        } else {
+          // "¿Qué tipo de trabajo te gustaría conseguir?" — a desired position.
+          updates.targetRole = truncate(raw, 120);
+          summary = `El puesto que buscas es: "${truncate(raw, 120)}".`;
+        }
         break;
       }
       case "personal_information": {

@@ -22,6 +22,7 @@ import { Errors } from "@/lib/errors";
 import { assembleProfileState } from "@/lib/profile-state";
 import { buildSkillGroups, traceBullets } from "./source-tracing";
 import { sortExperienceNewestFirst } from "./experience-order";
+import { withGenerationLock } from "./generation-lock";
 import { getResumeGuidelines } from "./guidelines";
 import { renderResumeHtml, type ResumeRenderModel } from "./resume-renderer";
 
@@ -31,6 +32,16 @@ export interface GeneratedResumeResult {
 }
 
 export async function generateResume(
+  store: Store,
+  ai: AIProvider,
+  profileId: string,
+): Promise<GeneratedResumeResult> {
+  // A second concurrent request joins the first rather than paying for its own
+  // generation and writing a competing version. See lib/resume/generation-lock.ts.
+  return withGenerationLock(profileId, () => runGeneration(store, ai, profileId));
+}
+
+async function runGeneration(
   store: Store,
   ai: AIProvider,
   profileId: string,
@@ -147,6 +158,8 @@ export async function generateResume(
     entryId: e.id,
     title: e.title,
     organization: e.organization,
+    // Gives the renderer a real heading when there is no title or employer.
+    experienceType: e.experienceType,
     location: e.location,
     startDate: e.startDate,
     endDate: e.endDate,

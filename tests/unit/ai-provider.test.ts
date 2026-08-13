@@ -60,7 +60,9 @@ describe("MockAIProvider.planNextQuestion", () => {
 });
 
 describe("MockAIProvider.normalizeAnswer", () => {
-  it("extracts career goal without inventing extra data", async () => {
+  it("puts the desired position in targetRole only, leaving the objective blank", async () => {
+    // The two career-goal questions fill different fields. Writing this answer
+    // into careerGoal as well made the Review screen show it twice.
     const state = stateWith();
     const result = await provider.normalizeAnswer({
       section: "career_goal",
@@ -69,8 +71,22 @@ describe("MockAIProvider.normalizeAnswer", () => {
       rawAnswer: "Asistente administrativa",
       state,
     });
-    expect(result.updates.careerGoal).toBe("Asistente administrativa");
+    expect(result.updates.targetRole).toBe("Asistente administrativa");
+    expect(result.updates.careerGoal).toBeUndefined();
     expect(result.suggestedSkills).toHaveLength(0);
+  });
+
+  it("puts the 'not sure what job' narrative in careerGoal, not in targetRole", async () => {
+    const state = stateWith();
+    const result = await provider.normalizeAnswer({
+      section: "career_goal",
+      questionId: "career_goal_unknown",
+      questionText: "¿Qué actividades disfrutas?",
+      rawAnswer: "Me gusta atender a la gente y organizar cosas",
+      state,
+    });
+    expect(result.updates.careerGoal).toBe("Me gusta atender a la gente y organizar cosas");
+    expect(result.updates.targetRole).toBeUndefined();
   });
 
   it("infers evidence-backed skills from an experience answer", async () => {

@@ -28,7 +28,11 @@ describe("processAnswer — adaptive flow (spec §17 scenario)", () => {
   it("walks a family-business user from career goal to a ready profile", async () => {
     // 1. Career goal.
     let res = await answer("career_goal_target", "career_goal", "Asistente administrativa");
-    expect(res.profileState.careerGoal).toBe("Asistente administrativa");
+    // The desired position lands in targetRole; the free-text objective stays
+    // empty for the person to fill in (or leave blank) on the Review screen.
+    expect(res.profileState.targetRole).toBe("Asistente administrativa");
+    // ResumeProfileState uses optional fields, so an unset column reads as undefined.
+    expect(res.profileState.careerGoal).toBeUndefined();
     expect(res.nextQuestion.section).toBe("personal_information");
     expect(res.nextQuestion.questionId).toBe("personal_name");
 

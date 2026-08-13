@@ -74,14 +74,20 @@ export function buildSkillGroups(
   const leftovers = confirmedSkills.filter((s) => !placed.has(s.id));
   if (leftovers.length > 0) {
     // Group leftovers by their own category rather than dumping them together.
-    const byCategory = new Map<string, SkillState[]>();
+    // Keyed case-INSENSITIVELY: categories reach us from the model's grouping, from
+    // each skill's stored category, and from the "General" default, so the same
+    // category can arrive in two casings. Keying on the raw string would render two
+    // groups that look identical on the page ("General:" twice). First spelling
+    // seen wins as the display label.
+    const byCategory = new Map<string, { label: string; skills: SkillState[] }>();
     for (const s of leftovers) {
-      const arr = byCategory.get(s.category) ?? [];
-      arr.push(s);
-      byCategory.set(s.category, arr);
+      const key = s.category.trim().toLocaleLowerCase("es");
+      const bucket = byCategory.get(key) ?? { label: s.category, skills: [] };
+      bucket.skills.push(s);
+      byCategory.set(key, bucket);
     }
-    for (const [category, arr] of byCategory) {
-      const existing = result.find((r) => r.category === category);
+    for (const [key, { label: category, skills: arr }] of byCategory) {
+      const existing = result.find((r) => r.category.trim().toLocaleLowerCase("es") === key);
       if (existing) {
         existing.skills.push(...arr.map((s) => s.name));
         existing.sourceSkillIds.push(...arr.map((s) => s.id));

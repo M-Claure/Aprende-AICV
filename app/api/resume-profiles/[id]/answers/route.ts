@@ -31,6 +31,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
         timeSpentMs: body.timeSpentMs,
         deviceCategory: body.deviceCategory,
         targetEntryId: body.targetEntryId,
+        forceNewEntry: body.forceNewEntry,
       },
     );
 

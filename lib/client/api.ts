@@ -48,6 +48,8 @@ export interface AnswerPayload {
   deviceCategory?: "mobile" | "tablet" | "desktop";
   /** Overwrite this entry instead of creating a new one (back-edit). */
   targetEntryId?: string;
+  /** Create a new entry instead of filling one still awaiting a description. */
+  forceNewEntry?: boolean;
 }
 
 export interface AnswerResult {

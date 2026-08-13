@@ -78,7 +78,10 @@ export function QuestionCard({
     if (isOver) return false;
     if (question.inputType === "multi_select") return selected.length > 0;
     if (question.inputType === "date_range") return start.trim().length > 0;
-    if (question.inputType === "type_counts") return totalCounts > 0;
+    // The counter accepts all-zeros on purpose: it is how someone with no
+    // experience of any kind says so. Experience questions have no "Omitir", so
+    // this is the only way past this step for them — the copy below spells it out.
+    if (question.inputType === "type_counts") return true;
     return text.trim().length > 0;
   };
 
@@ -247,13 +250,17 @@ export function QuestionCard({
               Pon cuántas tienes de cada tipo. Deja en 0 las que no tengas. Después te preguntamos por
               cada una.
             </p>
+            {/* One extra line at a time: the escape hatch before anything is
+                chosen, the remaining budget once the person starts counting. */}
             <p
               className={`text-xs ${countsRemaining === 0 ? "font-semibold text-text-primary" : "text-text-secondary"}`}
               aria-live="polite"
             >
-              {countsRemaining === 0
-                ? `Ya elegiste ${MAX_EXPERIENCE_ENTRIES}. Es el máximo. Si quieres cambiar una, aprieta el −.`
-                : `Puedes elegir ${MAX_EXPERIENCE_ENTRIES} en total. Te quedan ${countsRemaining}.`}
+              {totalCounts === 0
+                ? "Si no tienes ninguna, deja todo en 0 y aprieta “Continuar”."
+                : countsRemaining === 0
+                  ? `Ya elegiste ${MAX_EXPERIENCE_ENTRIES}. Es el máximo. Si quieres cambiar una, aprieta el −.`
+                  : `Puedes elegir ${MAX_EXPERIENCE_ENTRIES} en total. Te quedan ${countsRemaining}.`}
             </p>
           </div>
         );

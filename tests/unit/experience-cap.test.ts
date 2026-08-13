@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { MemoryStore } from "@/lib/repositories/memory-store";
 import { MockAIProvider } from "@/lib/ai/mock-provider";
 import { NoopAnalytics } from "@/lib/analytics";
-import { MAX_EXPERIENCE_ENTRIES } from "@/lib/config/limits";
+import { MAX_EDUCATION_ENTRIES, MAX_EXPERIENCE_ENTRIES } from "@/lib/config/limits";
 import { processAnswer, type PipelineContext } from "@/lib/services/answer-pipeline";
 import type { AIProvider } from "@/lib/ai";
 import type { AnswerNormalization } from "@/lib/ai/schemas";
@@ -119,6 +119,100 @@ describe("experience cap — the pipeline is the gate, not the provider", () => 
     const list = await store.listExperience(profileId);
     expect(list.length).toBe(MAX_EXPERIENCE_ENTRIES);
     expect(list.map((x) => x.rawDescription)).not.toContain("Experiencia 1");
+  });
+});
+
+describe("education cap", () => {
+  /** A provider that always asks for `count` brand-new education entries. */
+  function greedyEducationProvider(count: number): AIProvider {
+    const mock = new MockAIProvider();
+    return {
+      name: "greedy-education",
+      planNextQuestion: (p) => mock.planNextQuestion(p),
+      suggestSkills: () => Promise.resolve([]),
+      extractInterests: (p) => mock.extractInterests(p),
+      generateResumeContent: (p) => mock.generateResumeContent(p),
+      analyzeResume: (p) => mock.analyzeResume(p),
+      proofreadResume: (p) => mock.proofreadResume(p),
+      async normalizeAnswer(): Promise<AnswerNormalization> {
+        return {
+          interpretationSummary: "Anoté tus estudios.",
+          needsConfirmation: false,
+          suggestedSkills: [],
+          updates: {
+            educationEntries: Array.from({ length: count }, (_, i) => ({
+              credential: `Estudio ${i + 1}`,
+              relevantCoursework: [],
+            })),
+          },
+        };
+      },
+    };
+  }
+
+  it("creates at most MAX_EDUCATION_ENTRIES from one answer", async () => {
+    await processAnswer(
+      { ...ctx, ai: greedyEducationProvider(MAX_EDUCATION_ENTRIES + 3) },
+      {
+        profileId,
+        questionId: "education_highest",
+        section: "education",
+        rawAnswer: "Secundaria, un curso técnico y otro de computación",
+      },
+    );
+
+    expect((await store.listEducation(profileId)).length).toBe(MAX_EDUCATION_ENTRIES);
+  });
+
+  it("creates nothing more once the profile is already at the cap", async () => {
+    for (let i = 0; i < MAX_EDUCATION_ENTRIES; i++) {
+      await store.createEducation(profileId, { credential: `Existente ${i + 1}` });
+    }
+
+    await processAnswer(
+      { ...ctx, ai: greedyEducationProvider(2) },
+      { profileId, questionId: "education_highest", section: "education", rawAnswer: "Otro más" },
+    );
+
+    const list = await store.listEducation(profileId);
+    expect(list.length).toBe(MAX_EDUCATION_ENTRIES);
+    expect(list.map((e) => e.credential)).not.toContain("Estudio 1");
+  });
+
+  it("still updates an existing entry instead of creating when at the cap", async () => {
+    // education_details targets the most recent entry — capping creation must not
+    // break the enrichment path that walks entries already captured.
+    const first = await store.createEducation(profileId, { credential: "Secundaria" });
+    await store.createEducation(profileId, { credential: "Curso técnico" });
+
+    const res = await processAnswer(ctx, {
+      profileId,
+      questionId: "education_details",
+      section: "education",
+      rawAnswer: "Instituto Local. Aprendí computación básica.",
+    });
+
+    const list = await store.listEducation(profileId);
+    expect(list.length).toBe(MAX_EDUCATION_ENTRIES);
+    expect(res.affectedEntryId).not.toBe(first.id); // the latest entry, not a new one
+  });
+});
+
+describe("counter step with no experience at all", () => {
+  it("accepts an all-zeros answer and moves the funnel on", async () => {
+    // With no "Omitir" on experience questions, {} is how someone says "ninguna".
+    const res = await processAnswer(ctx, {
+      profileId,
+      questionId: "experience_type_counts",
+      section: "experience",
+      rawAnswer: "{}",
+    });
+
+    expect((await store.listExperience(profileId)).length).toBe(0);
+    // Must not land back on an experience question they cannot answer or skip.
+    expect(res.nextQuestion.questionId).not.toBe("experience_type_counts");
+    expect(res.nextQuestion.questionId).not.toBe("experience_add");
+    expect(res.nextQuestion.questionId).toBeTruthy();
   });
 });
 

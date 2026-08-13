@@ -457,7 +457,11 @@ export const ResumeAnalysisSchema = z.object({
         followUpQuestion: z.string().min(1).max(300),
       }),
     )
-    .max(14)
+    // The prompt asks for at most MAX_FEEDBACK_QUESTIONS_PER_ITERATION and the
+    // server shows no more than that. This ceiling stays looser on purpose: a model
+    // that returns one or two extra should not fail validation and cost three
+    // retries of the most expensive analysis call — the extras are simply dropped.
+    .max(8)
     .default([]),
 });
 export type ResumeAnalysisPayload = z.infer<typeof ResumeAnalysisSchema>;

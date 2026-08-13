@@ -54,7 +54,10 @@ export async function addUserSkill(
   }
   return store.createSkill(profileId, {
     name: input.name,
-    category: input.category ?? "general",
+    // Stored capitalized because it is a user-visible label on the résumé
+    // ("General: trabajo en equipo, puntualidad"). The renderer capitalizes too,
+    // which covers rows already saved as "general".
+    category: input.category ?? "General",
     proficiency: input.proficiency ?? null,
     origin: "user_entered",
     status: "confirmed",

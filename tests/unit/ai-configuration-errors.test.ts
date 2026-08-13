@@ -1,0 +1,127 @@
+/**
+ * A misconfigured server must not look like a misbehaving model.
+ *
+ * An invalid key, a key without access to the configured model, or a model id
+ * that does not exist all fail on every attempt. Retrying them burns three API
+ * calls and then reports "La IA no devolvió una respuesta válida" — which points
+ * whoever is debugging at prompts and Zod schemas instead of at the config.
+ */
+import Anthropic from "@anthropic-ai/sdk";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { AnthropicProvider } from "@/lib/ai/anthropic-provider";
+import { isAppError } from "@/lib/errors";
+import { experienceState, personalState } from "../helpers/factories";
+import { computeCompleteness } from "@/lib/question-engine/completeness-engine";
+import { completenessInput } from "../helpers/factories";
+import type { ResumeProfileState } from "@/types";
+
+function state(): ResumeProfileState {
+  const base = completenessInput({
+    careerGoal: "Asistente administrativa",
+    personalInformation: personalState({ firstName: "María", hasEmail: true }),
+    experience: [experienceState({ rawDescription: "Ayudaba en el negocio" })],
+  });
+  return { ...base, completeness: computeCompleteness(base) };
+}
+
+/** Replaces the provider's SDK client with one whose every call throws `err`. */
+function providerThatThrows(err: unknown, model = "claude-sonnet-5") {
+  const provider = new AnthropicProvider("sk-ant-test", model);
+  const create = vi.fn().mockRejectedValue(err);
+  // `client` is TypeScript-private only; swapping it is how we exercise the
+  // failure mapping without making a network call.
+  (provider as unknown as { client: { messages: { create: unknown } } }).client = {
+    messages: { create },
+  };
+  return { provider, create };
+}
+
+const apiError = (Ctor: new (...a: never[]) => Error, status: number, type: string) =>
+  new (Ctor as unknown as new (
+    status: number,
+    error: unknown,
+    message: string,
+    headers: undefined,
+  ) => Error)(status, { type: "error", error: { type, message: "boom" } }, "boom", undefined);
+
+const normalizeParams = () => ({
+  section: "experience" as const,
+  questionId: "experience_type_counts",
+  questionText: "¿Qué tipos de experiencia has tenido?",
+  rawAnswer: JSON.stringify({ caregiving: 2 }),
+  state: state(),
+});
+
+beforeEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe("configuration failures fail fast", () => {
+  it("maps an invalid API key to service_unavailable after ONE attempt", async () => {
+    const { provider, create } = providerThatThrows(
+      apiError(Anthropic.AuthenticationError, 401, "authentication_error"),
+    );
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(provider.normalizeAnswer(normalizeParams())).rejects.toSatisfy(
+      (err: unknown) => isAppError(err) && err.code === "service_unavailable",
+    );
+    // The point of the change: no retry storm on an unfixable error.
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it("names the real cause in details, not in the user-facing message", async () => {
+    const { provider } = providerThatThrows(
+      apiError(Anthropic.NotFoundError, 404, "not_found_error"),
+      "claude-does-not-exist",
+    );
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      await provider.normalizeAnswer(normalizeParams());
+      throw new Error("should have thrown");
+    } catch (err) {
+      if (!isAppError(err)) throw err;
+      // User-facing copy stays simple Spanish and blames nobody.
+      expect(err.message).not.toContain("ANTHROPIC_MODEL");
+      expect(err.message.toLowerCase()).toContain("servicio de ia");
+      // The diagnosis lives in details + the server log.
+      expect(JSON.stringify(err.details)).toContain("claude-does-not-exist");
+      expect(JSON.stringify(err.details)).toContain("ANTHROPIC_MODEL");
+    }
+  });
+
+  it("maps a key without model access to service_unavailable", async () => {
+    const { provider, create } = providerThatThrows(
+      apiError(Anthropic.PermissionDeniedError, 403, "permission_error"),
+    );
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(provider.normalizeAnswer(normalizeParams())).rejects.toSatisfy(
+      (err: unknown) => isAppError(err) && err.code === "service_unavailable",
+    );
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("transient failures still retry", () => {
+  it("retries a rate limit three times, then reports an AI validation error", async () => {
+    const { provider, create } = providerThatThrows(
+      apiError(Anthropic.RateLimitError, 429, "rate_limit_error"),
+    );
+
+    await expect(provider.normalizeAnswer(normalizeParams())).rejects.toSatisfy(
+      (err: unknown) => isAppError(err) && err.code === "ai_validation_error",
+    );
+    expect(create).toHaveBeenCalledTimes(3);
+  });
+
+  it("retries a connection error rather than giving up on the first failure", async () => {
+    const { provider, create } = providerThatThrows(new Anthropic.APIConnectionError({}));
+
+    await expect(provider.normalizeAnswer(normalizeParams())).rejects.toSatisfy(
+      (err: unknown) => isAppError(err) && err.code === "ai_validation_error",
+    );
+    expect(create).toHaveBeenCalledTimes(3);
+  });
+});

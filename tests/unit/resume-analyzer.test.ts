@@ -5,6 +5,7 @@ import { generateResume } from "@/lib/resume/resume-generator";
 import { analyzeResume } from "@/lib/resume/resume-analyzer";
 import { enrichEntry } from "@/lib/resume/entry-enrichment";
 import { answerCharLimitForQuestion, followUpCharLimit } from "@/lib/answer-limits";
+import { DEEP_DIVE_SLOTS, MAX_FEEDBACK_QUESTIONS_PER_ITERATION } from "@/lib/config/limits";
 import { getCatalogQuestion } from "@/lib/question-engine/question-catalog";
 import { AnswerBody } from "@/lib/validation/api-schemas";
 
@@ -33,7 +34,7 @@ beforeEach(() => {
 });
 
 describe("analyzeResume — surfaces gaps as follow-up questions", () => {
-  it("flags missing languages, interests, thin experience and few skills", async () => {
+  it("asks at most five questions, led by the highest-priority gaps", async () => {
     const id = await seedThinProfile();
     await generateResume(store, ai, id);
 
@@ -42,11 +43,14 @@ describe("analyzeResume — surfaces gaps as follow-up questions", () => {
     expect(analysis.strengths.length).toBeGreaterThan(0);
 
     const qids = analysis.improvements.map((i) => i.questionId);
+    expect(analysis.improvements.length).toBe(MAX_FEEDBACK_QUESTIONS_PER_ITERATION);
     expect(qids).toContain("languages_any");
-    expect(qids).toContain("interests");
     expect(qids).toContain("skills_add"); // only 1 confirmed skill
     // Thin experience surfaces at least one experience follow-up.
     expect(qids.some((q) => q === "experience_results" || q === "experience_scope")).toBe(true);
+    // A reserved slot goes to the personalized deep-dive, which scores lowest on
+    // priority and would otherwise be cut entirely by the cap.
+    expect(qids).toContain("experience_deepen");
 
     // Every improvement is routable (has a real section + inputType + question)
     // and carries the answer limit the UI shows and enforces.
@@ -69,28 +73,50 @@ describe("analyzeResume — surfaces gaps as follow-up questions", () => {
     });
 
     const analysis = await analyzeResume(store, flaky, id);
-    // Still returns routable follow-ups instead of throwing.
+    // Still returns routable follow-ups instead of throwing — and still capped.
     expect(analysis.improvements.length).toBeGreaterThan(0);
+    expect(analysis.improvements.length).toBeLessThanOrEqual(MAX_FEEDBACK_QUESTIONS_PER_ITERATION);
     const qids = analysis.improvements.map((i) => i.questionId);
     expect(qids).toContain("languages_any");
-    expect(qids).toContain("interests");
   });
 
-  it("drops a gap once the user provides that information (loop converges)", async () => {
+  it("resolving a gap frees its slot for one the cap had crowded out", async () => {
     const id = await seedThinProfile();
     await generateResume(store, ai, id);
-    let analysis = await analyzeResume(store, ai, id);
-    expect(analysis.improvements.map((i) => i.questionId)).toContain("interests");
+    let qids = (await analyzeResume(store, ai, id)).improvements.map((i) => i.questionId);
+    // Round 1: languages is shown (priority 4); interests (priority 5) does not fit.
+    expect(qids).toContain("languages_any");
+    expect(qids).not.toContain("interests");
 
-    // Provide interests, regenerate, re-analyze.
-    await store.updateResumeProfile(id, { interests: ["Lectura", "Fútbol"] });
+    // Provide the languages, regenerate, re-analyze.
     await store.createLanguage(id, { name: "Español", speakingLevel: "nativo" });
     await generateResume(store, ai, id);
-    analysis = await analyzeResume(store, ai, id);
+    qids = (await analyzeResume(store, ai, id)).improvements.map((i) => i.questionId);
 
-    const qids = analysis.improvements.map((i) => i.questionId);
-    expect(qids).not.toContain("interests"); // resolved
-    expect(qids).not.toContain("languages_any"); // resolved
+    expect(qids).not.toContain("languages_any"); // resolved, so it drops out
+    expect(qids).toContain("interests"); // and the freed slot goes to the next gap
+  });
+
+  it("holds slots for deep-dives without starving them of gaps", async () => {
+    // Four thin experiences produce four deep-dives, all at the fallback priority.
+    const id = await seedThinProfile();
+    for (const org of ["Tienda", "Parroquia", "Taller"]) {
+      await store.createExperience(id, {
+        experienceType: "informal_work",
+        organization: org,
+        responsibilities: ["Ayudaba"],
+        confirmationStatus: "confirmed",
+      });
+    }
+    await generateResume(store, ai, id);
+
+    const qids = (await analyzeResume(store, ai, id)).improvements.map((i) => i.questionId);
+    expect(qids.length).toBe(MAX_FEEDBACK_QUESTIONS_PER_ITERATION);
+    // Two reserved for deep-dives, three for the top gaps — neither side takes over.
+    expect(qids.filter((q) => q === "experience_deepen").length).toBe(DEEP_DIVE_SLOTS);
+    expect(qids.filter((q) => q !== "experience_deepen").length).toBe(
+      MAX_FEEDBACK_QUESTIONS_PER_ITERATION - DEEP_DIVE_SLOTS,
+    );
   });
 });
 

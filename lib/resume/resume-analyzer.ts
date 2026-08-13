@@ -12,9 +12,11 @@ import type { ResumeProfileState } from "@/types";
 import type { AIProvider } from "@/lib/ai";
 import type { InputType } from "@/lib/ai/schemas";
 import { followUpCharLimit } from "@/lib/answer-limits";
+import { DEEP_DIVE_SLOTS, MAX_FEEDBACK_QUESTIONS_PER_ITERATION } from "@/lib/config/limits";
 import { Errors } from "@/lib/errors";
 import type { Store } from "@/lib/repositories/store";
 import { assembleProfileState } from "@/lib/profile-state";
+import { analysisFingerprint, getCachedAnalysis, setCachedAnalysis } from "./analysis-cache";
 import { getResumeGuidelines } from "./guidelines";
 
 interface FollowupDef {
@@ -203,10 +205,52 @@ function buildGapHints(state: ResumeProfileState): string[] {
   return [...detectGaps(state), ...detectDeepDives(state)].map((g) => g.title);
 }
 
+/** Display order: section gaps by priority, then the per-entry deep-dives. */
+function byPriority(a: ImprovementDraft, b: ImprovementDraft): number {
+  return (FOLLOWUP_DEFS[a.questionId]?.priority ?? 50) - (FOLLOWUP_DEFS[b.questionId]?.priority ?? 50);
+}
+
+/**
+ * Trims a round to `MAX_FEEDBACK_QUESTIONS_PER_ITERATION` questions.
+ *
+ * A plain "top N by priority" would be wrong: the eight section gaps hold
+ * priorities 1–8 while every personalized deep-dive falls back to 50, so the cap
+ * would silently delete exactly the questions that most improve the résumé
+ * ("Cuéntame más sobre «Negocio de limpieza»"). So `DEEP_DIVE_SLOTS` of the five
+ * are held for deep-dives, the rest go to the highest-priority gaps, and either
+ * side backfills whatever the other doesn't use — a profile with no thin entries
+ * still gets five gaps, and one with nothing but thin entries still gets five
+ * deep-dives.
+ */
+function selectImprovements(drafts: ImprovementDraft[]): ImprovementDraft[] {
+  const isDeepDive = (i: ImprovementDraft) => DEEPEN_TYPES[i.questionId] !== undefined;
+  const deepDives = drafts.filter(isDeepDive);
+  const gaps = drafts.filter((i) => !isDeepDive(i)).sort(byPriority);
+
+  const reserved = Math.min(DEEP_DIVE_SLOTS, deepDives.length);
+  const chosen = [
+    ...gaps.slice(0, MAX_FEEDBACK_QUESTIONS_PER_ITERATION - reserved),
+    ...deepDives.slice(0, reserved),
+  ];
+  // Backfill any slot the other side left empty.
+  if (chosen.length < MAX_FEEDBACK_QUESTIONS_PER_ITERATION) {
+    const rest = [...gaps, ...deepDives].filter((i) => !chosen.includes(i));
+    chosen.push(...rest.slice(0, MAX_FEEDBACK_QUESTIONS_PER_ITERATION - chosen.length));
+  }
+  return chosen.sort(byPriority);
+}
+
 export async function analyzeResume(store: Store, ai: AIProvider, profileId: string): Promise<ResumeAnalysis> {
   const state = await assembleProfileState(store, profileId);
   const resume = await store.getLatestGeneratedResume(profileId);
   if (!resume) throw Errors.notFound("Aún no se ha generado un currículum para analizar.");
+
+  // Serve an identical critique from memory rather than paying for it again. The
+  // key covers the résumé version and every profile fact the detectors below read,
+  // so answering a follow-up or regenerating invalidates it automatically.
+  const cacheKey = analysisFingerprint(state, resume);
+  const cached = getCachedAnalysis(profileId, cacheKey);
+  if (cached) return cached;
 
   const gaps = detectGaps(state);
   const deepDives = detectDeepDives(state);
@@ -232,9 +276,7 @@ export async function analyzeResume(store: Store, ai: AIProvider, profileId: str
       overallImpression:
         "Tu currículum ya tiene una base sólida. Responde las siguientes preguntas para hacerlo más completo y fuerte.",
       strengths: [],
-      improvements: [...gaps, ...deepDives]
-        .sort((a, b) => (FOLLOWUP_DEFS[a.questionId]?.priority ?? 50) - (FOLLOWUP_DEFS[b.questionId]?.priority ?? 50))
-        .map(withCharLimit),
+      improvements: selectImprovements([...gaps, ...deepDives]).map(withCharLimit),
     };
   }
 
@@ -275,18 +317,13 @@ export async function analyzeResume(store: Store, ai: AIProvider, profileId: str
     });
   }
 
-  // Order: section gaps by priority first, then per-entry deep-dives.
-  const improvements = [...byId.values()]
-    .sort((a, b) => {
-      const pa = FOLLOWUP_DEFS[a.questionId]?.priority ?? 50;
-      const pb = FOLLOWUP_DEFS[b.questionId]?.priority ?? 50;
-      return pa - pb;
-    })
-    .map(withCharLimit);
+  const improvements = selectImprovements([...byId.values()]).map(withCharLimit);
 
-  return {
+  const analysis: ResumeAnalysis = {
     overallImpression: ai_result.overallImpression,
     strengths: ai_result.strengths,
     improvements,
   };
+  setCachedAnalysis(profileId, cacheKey, analysis);
+  return analysis;
 }

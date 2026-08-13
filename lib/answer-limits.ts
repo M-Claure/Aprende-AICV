@@ -127,6 +127,42 @@ export const LIST_MAX_ITEMS = 12;
 export const CAREER_GOAL_CHAR_LIMIT = 300;
 export const TARGET_ROLE_CHAR_LIMIT = 200;
 
+/**
+ * Limits for the individual fields the Review screen edits directly.
+ *
+ * These numbers were previously written as bare literals inside the Zod request
+ * schemas, which meant the screen could only show a counter by duplicating them —
+ * and a duplicated limit drifts, leaving the person a counter that says "fits"
+ * against a server that returns 422. `lib/validation/api-schemas.ts` and
+ * `components/EditableReview.tsx` now both read from here, so the number under
+ * the field is by construction the number the API enforces.
+ */
+export const REVIEW_FIELD_CHAR_LIMITS = {
+  // ── Personal information ──
+  firstName: 120,
+  lastName: 120,
+  city: 120,
+  state: 120,
+  country: 120,
+  email: 200,
+  phone: 60,
+  linkedInUrl: 300,
+  portfolioUrl: 300,
+  // ── Education / experience entry fields ──
+  institution: 200,
+  credential: 200,
+  fieldOfStudy: 200,
+  title: 200,
+  organization: 200,
+  location: 200,
+  peopleServed: 200,
+  /** Dates stay free text ("junio de 2019", "de marzo 2020 a la actualidad"). */
+  date: 60,
+  // ── List entries: the cap is PER ITEM, not on the whole comma-separated box ──
+  skillName: 80,
+  interest: 80,
+} as const;
+
 /** Shown when an answer is over the limit; also used by the 422 message. */
 export function tooLongMessage(limit: number): string {
   return `Tu respuesta es muy larga. Escríbela con ${limit} letras o menos.`;

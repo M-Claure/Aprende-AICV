@@ -10,7 +10,7 @@
 import type { ResumeProfileState, ResumeSection } from "@/types";
 import type { InputType } from "@/lib/ai/schemas";
 import { MAX_EXPERIENCE_ENTRIES } from "@/lib/config/limits";
-import { isExperienceUndescribed, labelForType } from "@/lib/experience-types";
+import { isExperienceUndated, isExperienceUndescribed, labelForType } from "@/lib/experience-types";
 
 export interface CatalogQuestion {
   id: string;
@@ -63,6 +63,20 @@ const hasBackground = (s: ResumeProfileState) =>
 // earlier entries and never terminating when there are several.
 const experienceMissingResponsibilities = (s: ResumeProfileState) =>
   s.experience.some(isExperienceUndescribed);
+
+/**
+ * Whether the person has already told us HOW MANY experiences they have — by
+ * answering the counter step (or, on profiles from before it became mandatory,
+ * by skipping it).
+ *
+ * This gates the describe question's "nothing captured yet" branch. Answering the
+ * counter with every type at 0 is a real answer — "no tengo ninguna" — and since
+ * no experience question offers "Omitir", asking them to describe an experience
+ * anyway would leave them on a question they cannot answer and cannot leave.
+ */
+const declaredExperienceCounts = (s: ResumeProfileState) =>
+  s.answeredQuestionIds.includes("experience_type_counts") ||
+  s.skippedQuestionIds.includes("experience_type_counts");
 const latestExperience = (s: ResumeProfileState) =>
   s.experience.length > 0 ? s.experience[s.experience.length - 1] : undefined;
 const latestMissingPeople = (s: ResumeProfileState) => {
@@ -77,20 +91,50 @@ const latestMissingResults = (s: ResumeProfileState) => {
   const e = latestExperience(s);
   return !!e && e.accomplishments.length === 0 && e.metrics.length === 0;
 };
-const latestMissingDates = (s: ResumeProfileState) => {
-  const e = latestExperience(s);
-  return !!e && !has(e.startDate) && !has(e.endDate) && !e.isCurrent;
+/**
+ * Dates are asked for EVERY experience, not just the most recent one.
+ *
+ * The résumé orders experience newest-first (`lib/resume/experience-order.ts`), and
+ * an entry with no dates cannot be placed — it sinks to the bottom in capture
+ * order. Asking only about the latest entry left every earlier one undateable, so
+ * a three-experience résumé was effectively unordered. This walks them in the same
+ * order as the describe loop.
+ */
+const experienceMissingDates = (s: ResumeProfileState) => s.experience.some(isExperienceUndated);
+
+/** Names which experience the date question is about, mirroring the describe step. */
+const datesExperienceText = (s: ResumeProfileState): string => {
+  const idx = s.experience.findIndex(isExperienceUndated);
+  const entry = idx >= 0 ? s.experience[idx] : undefined;
+  const ask = "¿En qué fechas fue? Una fecha aproximada está bien.";
+  if (!entry) return `¿En qué fechas fue esa experiencia? Una fecha aproximada está bien.`;
+  const label = labelForType(entry.experienceType);
+  const total = s.experience.length;
+  if (total === 1) return `Tu ${label}: ${ask}`;
+  return `Experiencia ${idx + 1} de ${total}, tu ${label}: ${ask}`;
 };
 
-/** Personalized wording for the "describe this experience" step: names the type
- *  of the first still-undescribed entry and its position ("2 de 3"). */
+/**
+ * Wording for the "describe this experience" step.
+ *
+ * Leads with the position and the TYPE the person picked in the counter step, so
+ * each question maps 1:1 onto the list they built: pick 2 informal + 1
+ * volunteering and you are asked about "Experiencia 1 de 3: tu trabajo informal",
+ * then 2 de 3, then "tu voluntariado". Without the number in front, three
+ * near-identical questions in a row give no sense of position or progress.
+ *
+ * Entries added through the broad "Agregar otra experiencia" path carry the
+ * `other` type, which labels as plain "experiencia" — deliberately generic, since
+ * nobody told us what kind it is.
+ */
 const describeExperienceText = (s: ResumeProfileState): string => {
   const idx = s.experience.findIndex(isExperienceUndescribed);
   const entry = idx >= 0 ? s.experience[idx] : undefined;
-  if (!entry) return "Cuéntame de una experiencia: ¿de qué se trataba y qué hacías?";
+  if (!entry) return "Cuéntame de otra experiencia: ¿de qué se trataba y qué hacías?";
   const label = labelForType(entry.experienceType);
-  const position = s.experience.length > 1 ? ` (experiencia ${idx + 1} de ${s.experience.length})` : "";
-  return `Cuéntame de tu ${label}${position}: ¿de qué se trataba y qué hacías?`;
+  const total = s.experience.length;
+  if (total === 1) return `Cuéntame de tu ${label}: ¿de qué se trataba y qué hacías?`;
+  return `Experiencia ${idx + 1} de ${total}: tu ${label}. Cuéntame de qué se trataba y qué hacías.`;
 };
 const educationMissingDates = (s: ResumeProfileState) =>
   s.education.some((e) => !has(e.endDate) && !e.isCurrent);
@@ -223,7 +267,11 @@ export const QUESTION_CATALOG: CatalogQuestion[] = [
     intent: "Capturar el tipo y la cantidad de experiencias para preguntar por cada una.",
     inputType: "type_counts",
     required: false,
-    allowSkip: true,
+    // No skip anywhere in the experience section: experience is what the résumé is
+    // built from, and a skipped experience question is a gap nothing else fills.
+    // Here the escape hatch is answering with every counter at 0 — that IS "no
+    // tengo ninguna", and the UI says so, so nobody is trapped without a skip.
+    allowSkip: false,
     charLimit: 400, // payload JSON de conteos, no lo teclea la persona
     precondition: (s) => s.experience.length === 0,
     completionEffect: ["experienceType"],
@@ -239,10 +287,13 @@ export const QUESTION_CATALOG: CatalogQuestion[] = [
     exampleAnswer: "Ayudaba en el negocio de limpieza de mi mamá atendiendo a los clientes.",
     inputType: "long_text",
     required: false,
-    allowSkip: true,
+    allowSkip: false,
     charLimit: 600, // descripción principal de una experiencia
-    // Fires while any listed experience still needs describing (or none exist yet).
-    precondition: (s) => experienceMissingResponsibilities(s) || s.experience.length === 0,
+    // Fires while any listed experience still needs describing — or, before the
+    // counter step has been answered, when nothing is captured yet.
+    precondition: (s) =>
+      experienceMissingResponsibilities(s) ||
+      (s.experience.length === 0 && !declaredExperienceCounts(s)),
     completionEffect: ["experience"],
     priority: 41,
     repeatable: true,
@@ -254,7 +305,7 @@ export const QUESTION_CATALOG: CatalogQuestion[] = [
     intent: "Detallar responsabilidades cuando faltan.",
     inputType: "long_text",
     required: false,
-    allowSkip: true,
+    allowSkip: false,
     charLimit: 500, // lista de tareas de un día normal
     precondition: (s) => s.experience.length > 0 && experienceMissingResponsibilities(s),
     completionEffect: ["responsibilities"],
@@ -267,7 +318,7 @@ export const QUESTION_CATALOG: CatalogQuestion[] = [
     intent: "Descubrir alcance/transferibilidad sin asumir liderazgo.",
     inputType: "long_text",
     required: false,
-    allowSkip: true,
+    allowSkip: false,
     charLimit: 400, // dinero, clientes, inventario, supervisión
     precondition: (s) => latestMissingTools(s) || latestMissingPeople(s),
     completionEffect: ["tools", "peopleServed"],
@@ -280,7 +331,7 @@ export const QUESTION_CATALOG: CatalogQuestion[] = [
     intent: "Capturar logros/métricas verdaderas (aproximadas permitidas).",
     inputType: "long_text",
     required: false,
-    allowSkip: true,
+    allowSkip: false,
     charLimit: 400, // resultados o logros con cantidades
     precondition: (s) => latestMissingResults(s),
     completionEffect: ["accomplishments", "metrics"],
@@ -289,15 +340,20 @@ export const QUESTION_CATALOG: CatalogQuestion[] = [
   {
     id: "experience_dates",
     section: "experience",
-    text: "¿En qué fechas fue esa experiencia? Una fecha aproximada está bien.",
+    // Names the entry it is about; asked once per experience so the résumé can be
+    // ordered newest-first.
+    text: datesExperienceText,
+    supportingText: "Sirve para ordenar tus experiencias de la más nueva a la más vieja.",
+    exampleAnswer: "de marzo 2020 a la actualidad",
     intent: "Capturar fechas de experiencia.",
     inputType: "short_text",
     required: false,
-    allowSkip: true,
+    allowSkip: false,
     charLimit: 60, // "de marzo 2020 a la actualidad" (29)
-    precondition: (s) => latestMissingDates(s),
+    precondition: (s) => experienceMissingDates(s),
     completionEffect: ["startDate", "endDate"],
     priority: 45,
+    repeatable: true,
   },
 
   // ── Skills ──

@@ -340,6 +340,16 @@ export interface GeneratedExperienceBlock {
   endDate: string | null;
   isCurrent: boolean;
   bullets: GeneratedBullet[];
+  /**
+   * The kind of experience this was. Carried onto the block so the renderer has a
+   * meaningful heading when neither a job title nor an employer exists — which is
+   * the norm for this product's users: "cuidaba a mi abuela" has no title and no
+   * organization, and heading such an entry "Experiencia" tells a reader nothing.
+   *
+   * Optional because résumés generated before this field existed are stored as
+   * JSON and will not have it.
+   */
+  experienceType?: ExperienceType;
 }
 
 export interface GeneratedEducationBlock {

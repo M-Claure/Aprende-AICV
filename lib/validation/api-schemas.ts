@@ -9,6 +9,7 @@ import {
   ENTRY_TEXT_CHAR_LIMIT,
   LIST_ITEM_CHAR_LIMIT,
   LIST_MAX_ITEMS,
+  REVIEW_FIELD_CHAR_LIMITS as R,
   answerCharLimitForQuestion,
   tooLongMessage,
 } from "@/lib/answer-limits";
@@ -117,6 +118,9 @@ export const AnswerBody = z
     deviceCategory: z.enum(["mobile", "tablet", "desktop"]).optional(),
     // Overwrite this existing entry instead of creating a new one (back-edit).
     targetEntryId: z.string().max(120).optional(),
+    // Create a new entry rather than filling one still awaiting a description
+    // ("Agregar otra experiencia"). The cap is still enforced server-side.
+    forceNewEntry: z.boolean().optional(),
   })
   .refine((b) => b.skipped || b.rawAnswer !== undefined || b.skillDecisions !== undefined, {
     message: "Se requiere una respuesta, decisiones de habilidades, o skipped=true",
@@ -137,12 +141,12 @@ export const AnswerBody = z
   });
 
 export const CreateEducationBody = z.object({
-  institution: z.string().trim().max(200).optional(),
-  credential: z.string().trim().max(200).optional(),
-  fieldOfStudy: z.string().trim().max(200).optional(),
-  location: z.string().trim().max(200).optional(),
-  startDate: z.string().trim().max(60).optional(),
-  endDate: z.string().trim().max(60).optional(),
+  institution: z.string().trim().max(R.institution).optional(),
+  credential: z.string().trim().max(R.credential).optional(),
+  fieldOfStudy: z.string().trim().max(R.fieldOfStudy).optional(),
+  location: z.string().trim().max(R.location).optional(),
+  startDate: z.string().trim().max(R.date).optional(),
+  endDate: z.string().trim().max(R.date).optional(),
   isCurrent: z.boolean().optional(),
   relevantCoursework: strArray.optional(),
   achievements: strArray.optional(),
@@ -153,17 +157,17 @@ export const UpdateEducationBody = CreateEducationBody.extend({
 
 export const CreateExperienceBody = z.object({
   experienceType: z.enum(EXPERIENCE_TYPES),
-  title: z.string().trim().max(200).optional(),
-  organization: z.string().trim().max(200).optional(),
-  location: z.string().trim().max(200).optional(),
-  startDate: z.string().trim().max(60).optional(),
-  endDate: z.string().trim().max(60).optional(),
+  title: z.string().trim().max(R.title).optional(),
+  organization: z.string().trim().max(R.organization).optional(),
+  location: z.string().trim().max(R.location).optional(),
+  startDate: z.string().trim().max(R.date).optional(),
+  endDate: z.string().trim().max(R.date).optional(),
   isCurrent: z.boolean().optional(),
   rawDescription: optStr,
   responsibilities: strArray.optional(),
   accomplishments: strArray.optional(),
   tools: strArray.optional(),
-  peopleServed: z.string().trim().max(200).optional(),
+  peopleServed: z.string().trim().max(R.peopleServed).optional(),
   metrics: strArray.optional(),
 });
 export const UpdateExperienceBody = CreateExperienceBody.partial().extend({
@@ -199,23 +203,23 @@ export const CreateProjectBody = z.object({
 });
 
 export const PatchPersonalInfoBody = z.object({
-  firstName: z.string().trim().max(120).nullable().optional(),
-  lastName: z.string().trim().max(120).nullable().optional(),
-  city: z.string().trim().max(120).nullable().optional(),
-  state: z.string().trim().max(120).nullable().optional(),
-  country: z.string().trim().max(120).nullable().optional(),
-  phone: z.string().trim().max(60).nullable().optional(),
-  email: z.string().trim().max(200).nullable().optional(),
-  linkedInUrl: z.string().trim().max(300).nullable().optional(),
-  portfolioUrl: z.string().trim().max(300).nullable().optional(),
+  firstName: z.string().trim().max(R.firstName).nullable().optional(),
+  lastName: z.string().trim().max(R.lastName).nullable().optional(),
+  city: z.string().trim().max(R.city).nullable().optional(),
+  state: z.string().trim().max(R.state).nullable().optional(),
+  country: z.string().trim().max(R.country).nullable().optional(),
+  phone: z.string().trim().max(R.phone).nullable().optional(),
+  email: z.string().trim().max(R.email).nullable().optional(),
+  linkedInUrl: z.string().trim().max(R.linkedInUrl).nullable().optional(),
+  portfolioUrl: z.string().trim().max(R.portfolioUrl).nullable().optional(),
 });
 
 export const AddSkillsBody = z.object({
-  names: z.array(nonEmpty.max(80)).min(1).max(30),
+  names: z.array(nonEmpty.max(R.skillName)).min(1).max(30),
 });
 
 export const SetInterestsBody = z.object({
-  interests: z.array(z.string().trim().min(1).max(80)).max(30),
+  interests: z.array(z.string().trim().min(1).max(R.interest)).max(30),
 });
 
 /** Free-text interests answer → the server extracts genuine interests (ignoring

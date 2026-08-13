@@ -16,13 +16,13 @@ import type { AIProvider } from "@/lib/ai";
 import type { Analytics } from "@/lib/analytics";
 import type { Store } from "@/lib/repositories/store";
 import { Errors } from "@/lib/errors";
-import { MAX_EXPERIENCE_ENTRIES } from "@/lib/config/limits";
+import { MAX_EDUCATION_ENTRIES, MAX_EXPERIENCE_ENTRIES } from "@/lib/config/limits";
 import { assembleProfileState } from "@/lib/profile-state";
 import { planNextQuestion } from "@/lib/question-engine/adaptive-planner";
 import { getCatalogQuestion } from "@/lib/question-engine/question-catalog";
 import { inferAndPersistSkills } from "@/lib/skills/skill-inference";
 import { addUserSkill, applySkillDecisions, type SkillEdit } from "@/lib/skills/skill-confirmation";
-import { isExperienceUndescribed } from "@/lib/experience-types";
+import { isExperienceUndated, isExperienceUndescribed } from "@/lib/experience-types";
 import { recordQuestionShown } from "@/lib/services/funnel-telemetry";
 
 export interface PipelineContext {
@@ -46,6 +46,12 @@ export interface ProcessAnswerInput {
    * creating a new one. Used when the user goes back and re-answers a question.
    */
   targetEntryId?: string;
+  /**
+   * When true, this answer must CREATE a new entry rather than fill one that is
+   * still waiting to be described. Set by "Agregar otra experiencia", where the
+   * person is explicitly adding an experience beyond the ones they counted.
+   */
+  forceNewEntry?: boolean;
 }
 
 export interface ProcessAnswerResult {
@@ -157,7 +163,14 @@ export async function processAnswer(
         rawAnswer: raw,
         state: stateBefore,
       });
-      const applied = await applyNormalization(store, input.profileId, input.questionId, norm, input.targetEntryId);
+      const applied = await applyNormalization(
+        store,
+        input.profileId,
+        input.questionId,
+        norm,
+        input.targetEntryId,
+        input.forceNewEntry ?? false,
+      );
       interpretation = { summary: norm.interpretationSummary, needsConfirmation: norm.needsConfirmation };
       affectedEntryId = applied.affectedEntryId;
 
@@ -250,6 +263,7 @@ async function applyNormalization(
   questionId: string,
   norm: AnswerNormalization,
   targetEntryId?: string,
+  forceNewEntry = false,
 ): Promise<AppliedChanges> {
   const u = norm.updates;
   let targetExperienceId: string | null = null;
@@ -288,7 +302,12 @@ async function applyNormalization(
       const updated = await store.updateEducation(target.id, mapEducation(u.educationEntries[0]!));
       affectedEntryId = updated.id;
     } else {
-      for (const e of u.educationEntries) {
+      // Same reasoning as the experience cap below: the count comes back from a
+      // model-normalized free-text answer, so the write is the only place that can
+      // guarantee it. Entries beyond the cap are dropped rather than failing the
+      // answer, so what fits is still captured.
+      const room = Math.max(0, MAX_EDUCATION_ENTRIES - list.length);
+      for (const e of u.educationEntries.slice(0, room)) {
         const created = await store.createEducation(profileId, mapEducation(e));
         affectedEntryId = created.id;
         addedEducation = true;
@@ -303,15 +322,36 @@ async function applyNormalization(
     // entries created by the counter step in order); enrichment updates the
     // latest; everything else creates.
     let target = explicit ?? undefined;
-    if (!target) {
+    // `forceNewEntry` is the "Agregar otra experiencia" path: the person asked for
+    // an ADDITIONAL experience, so this answer must never be adopted by an entry
+    // from the counter step that is still waiting to be described.
+    if (!target && !forceNewEntry) {
       if (questionId === "experience_add") {
         target = list.find(isExperienceUndescribed);
+      } else if (questionId === "experience_dates") {
+        // The date question names a specific entry — "Experiencia 2 de 3, tu
+        // voluntariado" — so the answer must land on THAT entry, not on whichever
+        // was captured last. Same walk order as the question.
+        target = list.find(isExperienceUndated) ?? list[list.length - 1];
       } else if (EXPERIENCE_UPDATE_Q.has(questionId)) {
         target = list[list.length - 1];
       }
     }
     if (target) {
-      const updated = await store.updateExperience(target.id, mapExperience(u.experienceEntries[0]!));
+      const changes = mapExperience(u.experienceEntries[0]!);
+      /*
+       * The type is an explicit choice made with the counter's +/− buttons; the
+       * description that follows is prose. Prose must never overwrite the choice —
+       * that is what made the labels drift mid-loop, turning the "trabajo informal"
+       * the person selected into "cuidado de personas" because they mentioned
+       * caring for a relative, and leaving the remaining questions mislabelled.
+       *
+       * `other` means nobody has told us the type yet (the broad add path), so
+       * detection is still welcome to fill it in. To correct a mis-selection, the
+       * Review screen has a type selector.
+       */
+      if (target.experienceType !== "other") changes.experienceType = undefined;
+      const updated = await store.updateExperience(target.id, changes);
       targetExperienceId = updated.id;
       affectedEntryId = updated.id;
     } else {

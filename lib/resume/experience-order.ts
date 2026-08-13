@@ -13,6 +13,8 @@
  * the end, rather than being guessed at.
  */
 
+import { MONTHS_ES } from "@/lib/experience-dates";
+
 /** The only fields ordering looks at. */
 export interface DatedExperience {
   startDate: string | null;
@@ -20,20 +22,20 @@ export interface DatedExperience {
   isCurrent: boolean;
 }
 
-/** Spanish month names and the abbreviations people actually type. */
+/**
+ * Month-name lookup: the canonical names come from `lib/experience-dates.ts`, the
+ * same list the Review screen's dropdown renders, so a date picked there always
+ * parses here. The extras are abbreviations and variants people actually type in
+ * the funnel, which the dropdown never produces.
+ */
+const MONTH_VARIANTS: Record<string, number> = {
+  ene: 1, feb: 2, mar: 3, abr: 4, may: 5, jun: 6,
+  jul: 7, ago: 8, sep: 9, sept: 9, set: 9, setiembre: 9,
+  oct: 10, nov: 11, dic: 12,
+};
 const MONTHS: Record<string, number> = {
-  enero: 1, ene: 1,
-  febrero: 2, feb: 2,
-  marzo: 3, mar: 3,
-  abril: 4, abr: 4,
-  mayo: 5, may: 5,
-  junio: 6, jun: 6,
-  julio: 7, jul: 7,
-  agosto: 8, ago: 8,
-  septiembre: 9, setiembre: 9, sept: 9, sep: 9, set: 9,
-  octubre: 10, oct: 10,
-  noviembre: 11, nov: 11,
-  diciembre: 12, dic: 12,
+  ...Object.fromEntries(MONTHS_ES.map((name, i) => [name, i + 1])),
+  ...MONTH_VARIANTS,
 };
 
 /** "Still going on" wording, in the words the funnel actually receives. */
