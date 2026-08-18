@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
  * POST /api/resume-profiles/:id/proofread
  * Runs a final AI spelling/grammar/formatting pass over the generated résumé and
  * saves the corrected version. Returns the new résumé + short notes on what was
- * corrected. Uses Claude (ctx.ai) — it's a quality step, like generation.
+ * corrected. Uses the paid model (ctx.ai) — it's a quality step, like generation.
  */
 export async function POST(_request: Request, { params }: { params: { id: string } }) {
   return handleRoute(async () => {

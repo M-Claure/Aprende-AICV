@@ -41,15 +41,15 @@ const RICH_CAPTURE_SECTIONS = new Set<ResumeSection>([
    * `credential` and left `institution` and `fieldOfStudy` null. The résumé then
    * showed a run-on heading and no school at all, which is not a rendering problem
    * but a capture one. Splitting a narrative into fields is exactly what the model
-   * is for; with thinking off and low effort it is one of the cheapest calls we make.
+   * is for; with reasoning off it is one of the cheapest calls we make.
    */
   "education",
 ]);
 
 /**
  * Questions inside a rich section whose answers still carry NO narrative, and so
- * have nothing for Claude to interpret. Routing by section alone sent these to
- * Claude purely for belonging to `experience`:
+ * have nothing for the model to interpret. Routing by section alone sent these to
+ * the model purely for belonging to `experience`:
  *
  *  - `experience_type_counts` — a machine-written JSON payload of counts per type
  *    (`{"caregiving":2}`), built by the counter UI, not typed by a person.
@@ -67,11 +67,11 @@ const MECHANICAL_QUESTION_IDS = new Set([
 ]);
 
 /**
- * Cost-aware funnel provider used when AI_PROVIDER=anthropic. It routes the
- * per-answer capture that most affects résumé quality to Claude (`capable`) and
+ * Cost-aware funnel provider used when AI_PROVIDER=azure. It routes the
+ * per-answer capture that most affects résumé quality to the model (`capable`) and
  * keeps cheap/deterministic operations (question planning, skill inference,
  * simple-field normalization) on the mock (`deterministic`). Résumé generation
- * and analysis always use Claude.
+ * and analysis always use the model.
  */
 export class HybridAIProvider implements AIProvider {
   readonly name = "hybrid";
@@ -87,7 +87,7 @@ export class HybridAIProvider implements AIProvider {
 
   normalizeAnswer(params: NormalizeAnswerParams): Promise<AnswerNormalization> {
     // Question id wins over section: a mechanical answer inside a rich section
-    // still has nothing worth paying Claude to read.
+    // still has nothing worth paying the model to read.
     const rich =
       RICH_CAPTURE_SECTIONS.has(params.section) && !MECHANICAL_QUESTION_IDS.has(params.questionId);
     return (rich ? this.capable : this.deterministic).normalizeAnswer(params);

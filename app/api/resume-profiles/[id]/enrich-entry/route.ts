@@ -14,7 +14,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
     const { userId, store, funnelAi } = await getRequestContext();
     await loadOwnedProfile(store, params.id, userId);
     const { entryType, entryId, rawAnswer } = EnrichEntryBody.parse(await readJson(request));
-    // Capturing the deep-dive detail is deterministic; Claude polishes on regenerate.
+    // Capturing the deep-dive detail is deterministic; the model polishes on regenerate.
     const result = await enrichEntry(store, funnelAi, params.id, entryType, entryId, rawAnswer);
     return ok(result);
   });

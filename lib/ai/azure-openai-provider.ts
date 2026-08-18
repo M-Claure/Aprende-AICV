@@ -1,5 +1,5 @@
 import "server-only";
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { z } from "zod";
 import { Errors } from "@/lib/errors";
 import { estimateCostUsd, type UsageTokens } from "./pricing";
@@ -44,109 +44,93 @@ import {
 /**
  * How much reasoning one operation is allowed to spend.
  *
- * `request` is spread into `messages.create`, so adding a field here changes every
- * call that uses the budget. Thinking is billed at OUTPUT rates, which is why this
- * is the main cost dial in the file.
+ * Reasoning tokens are billed at OUTPUT rates and are never read back (the
+ * summary is not requested), so this is the main cost dial in the file.
+ *
+ * `gpt-5.3-codex` accepts `none | low | medium | high | xhigh`. `none` really does
+ * mean none — a probe against the configured deployment returned
+ * `output_tokens_details.reasoning_tokens: 0` — which makes it the exact
+ * equivalent of the disabled-thinking budget this file used before the move off
+ * Anthropic.
  */
 interface CallBudget {
-  request: {
-    thinking?: { type: "disabled" } | { type: "adaptive" };
-    output_config?: { effort: "low" | "medium" | "high" };
-  };
-}
-
-/**
- * `thinking` and `output_config` are absent from the installed @anthropic-ai/sdk's
- * types (0.32.1 predates both), so they ride to the API through a spread rather
- * than a typed field. The API validates them; the SDK just forwards the body.
- *
- * The hazard is that a field this old SDK cannot type is also a field the compiler
- * cannot check — so if the API ever rejects one, EVERY call would 400 and the whole
- * product would stop. This detects exactly that rejection so the call can be retried
- * without the budget: slower and dearer, but working. Upgrading the SDK makes both
- * this guard and the spread unnecessary.
- */
-function rejectsBudgetFields(err: unknown): boolean {
-  if (!(err instanceof Anthropic.BadRequestError)) return false;
-  // Check the response body as well as the message: the SDK composes `message`
-  // itself, so the offending field name may only appear in the body it embeds.
-  const body = JSON.stringify((err as { error?: unknown }).error ?? "");
-  return /thinking|output_config|effort/i.test(`${err.message} ${body}`);
+  effort: "none" | "low" | "medium" | "high";
 }
 
 /**
  * Extraction, classification and correction: read the input, fill the fields.
- * No thinking, lowest effort — there is no multi-step problem to reason through,
- * and the JSON these calls return is small and highly constrained by its schema.
+ * No reasoning at all — there is no multi-step problem to work through, and the
+ * JSON these calls return is small and tightly constrained by its schema.
  */
-const MECHANICAL: CallBudget = {
-  request: { thinking: { type: "disabled" }, output_config: { effort: "low" } },
-};
+const MECHANICAL: CallBudget = { effort: "none" };
 
 /**
- * The résumé itself — the one output the whole product is judged on. Thinking on,
- * effort `high`.
+ * The résumé itself — the one output the whole product is judged on. Highest
+ * effort.
  *
  * `medium` was tried here as a cost saving and gave visibly thinner résumés, so it
  * was reverted: this call is ~1 of 20 per résumé, and the savings were never worth
  * the quality. The savings that stuck are on the mechanical funnel calls, which
  * cannot affect prose quality (see MECHANICAL).
  */
-const AUTHORED: CallBudget = {
-  request: { thinking: { type: "adaptive" }, output_config: { effort: "high" } },
-};
+const AUTHORED: CallBudget = { effort: "high" };
 
 /**
  * Judgement about an already-written résumé: the critique and its follow-up
- * questions. Thinking on at `medium` — the output is bounded to five questions, and
- * this is not the text the person walks away with.
+ * questions. `medium` — the output is bounded to five questions, and this is not
+ * the text the person walks away with.
  */
-const CONSIDERED: CallBudget = {
-  request: { thinking: { type: "adaptive" }, output_config: { effort: "medium" } },
-};
+const CONSIDERED: CallBudget = { effort: "medium" };
 
 /** Ceiling a retry may grow into, and the factor it grows by per truncation. */
 const MODEL_MAX_TOKENS = 32000;
 const TRUNCATION_HEADROOM = 1.75;
 
 /**
- * Real Claude-backed provider. Every call:
- *  1. sends the factuality system prompt + a task prompt,
+ * Real Azure-OpenAI-backed provider. Every call:
+ *  1. sends the factuality instructions + a task prompt,
  *  2. extracts JSON from the response,
  *  3. validates against the task's Zod schema (retrying once on failure),
  *  4. throws an ai_validation_error if the model still won't conform.
  *
  * The model is never given database access or tools that mutate state.
+ *
+ * Talks to the Azure OpenAI **v1** surface (`…/openai/v1`) with the stock OpenAI
+ * SDK: that endpoint speaks plain OpenAI wire format, so no `api-version` query
+ * parameter and no Azure-specific client are needed. Requests go to the
+ * **Responses** API, which is the only surface the `*-codex` models are served on.
  */
-export class AnthropicProvider implements AIProvider {
-  readonly name = "anthropic";
-  private client: Anthropic;
+export class AzureOpenAIProvider implements AIProvider {
+  readonly name = "azure-openai";
+  private client: OpenAI;
 
   constructor(
     apiKey: string,
+    baseURL: string,
     private readonly model: string,
   ) {
-    this.client = new Anthropic({ apiKey });
+    this.client = new OpenAI({ apiKey, baseURL });
   }
 
   /*
-   * ── Thinking and effort, per operation ──────────────────────────────────────
+   * ── Reasoning effort, per operation ─────────────────────────────────────────
    *
-   * Sending no `thinking` field runs ADAPTIVE thinking on current models, and
-   * thinking is billed at output rates — the expensive half of the bill. Worse,
-   * `thinking.display` defaults to "omitted", and nothing here ever reads a
-   * thinking block, so those tokens were paid for and thrown away.
+   * Omitting `reasoning` lets the deployment's own default decide, and reasoning
+   * is billed at output rates — the expensive half of the bill. Worse, nothing
+   * here ever reads a reasoning summary, so those tokens would be paid for and
+   * thrown away.
    *
-   * So each operation now declares what it needs:
+   * So each operation declares what it needs:
    *   - Mechanical extraction and correction (normalize an answer, pull interests
-   *     out of a sentence, fix accents) get NO thinking and low effort. There is no
-   *     multi-step reasoning in "which field does this sentence fill".
-   *   - Writing and judgement (the résumé itself, the critique) keep thinking, at
-   *     medium effort rather than the default high.
+   *     out of a sentence, fix accents) get NO reasoning. There is no multi-step
+   *     thinking in "which field does this sentence fill".
+   *   - Writing and judgement (the résumé itself, the critique) keep it, at high
+   *     and medium respectively.
    *
-   * `max_tokens` is sized to the JSON each call actually returns plus room for the
-   * thinking the call is allowed to do — no longer a blanket ceiling, since a large
-   * budget invites deeper thinking than these tasks need.
+   * `max_output_tokens` is sized to the JSON each call actually returns plus room
+   * for the reasoning the call is allowed to do — it is a combined ceiling over
+   * reasoning + visible output, so a large budget invites deeper reasoning than
+   * these tasks need.
    */
   async planNextQuestion(params: PlanQuestionParams): Promise<PlannerDecision> {
     return this.callJson(buildPlannerPrompt(params), PlannerDecisionSchema, 1536, "plan-question", MECHANICAL);
@@ -154,16 +138,18 @@ export class AnthropicProvider implements AIProvider {
 
   async normalizeAnswer(params: NormalizeAnswerParams): Promise<AnswerNormalization> {
     /*
-     * Sent as two halves: the instructions and this section's schema go in the
-     * SYSTEM prompt, the question and the person's answer in the user turn.
+     * Sent as two halves: the instructions and this section's schema go in
+     * `instructions`, the question and the person's answer in `input`.
      *
      * That ordering is what makes the instructions reusable. Prompt caching matches
      * on a prefix, and the old single-string prompt opened with the answer, so every
      * one of the ~26 normalizer calls per résumé had a unique prefix and nothing
      * could ever be reused. Now every call in a section shares a byte-identical
-     * system prefix. Turning the cache ON is one `cache_control` marker away — the
-     * installed SDK (0.32.1) does not type it at all, so that waits for the upgrade;
-     * `[ai-usage]` already prints `cache_read` to confirm it when it lands.
+     * prefix.
+     *
+     * On this API that saving is automatic — there are no cache markers to place,
+     * the platform caches long prefixes by itself and bills the reuse at a
+     * discount. `[ai-usage]` prints `cached` so you can confirm it is landing.
      */
     return this.callJson(
       buildNormalizerUserPrompt(params),
@@ -184,7 +170,7 @@ export class AnthropicProvider implements AIProvider {
   }
 
   async generateResumeContent(input: ResumeGenerationInput): Promise<ResumeContent> {
-    // The one call whose quality the whole product rests on: thinking stays on.
+    // The one call whose quality the whole product rests on: full effort.
     return this.callJson(buildResumeGenerationPrompt(input), ResumeContentSchema, 16000, "generate-resume", AUTHORED);
   }
 
@@ -206,14 +192,12 @@ export class AnthropicProvider implements AIProvider {
     budget: CallBudget,
     /**
      * Task instructions that do NOT vary with the input, appended to the factuality
-     * rules as a second system block. Kept separate from `prompt` so the stable text
-     * forms a prefix the API can cache once caching is enabled.
+     * rules. Kept separate from `prompt` so the stable text forms a cacheable prefix.
      */
     stableInstructions?: string,
   ): Promise<z.infer<S>> {
     let lastError: unknown;
     let truncations = 0;
-    let budgetFields: CallBudget["request"] = budget.request;
     for (let attempt = 0; attempt < 3; attempt++) {
       const content =
         attempt === 0
@@ -228,51 +212,38 @@ export class AnthropicProvider implements AIProvider {
       );
       let text: string;
       try {
-        const res = await this.client.messages.create({
+        const res = await this.client.responses.create({
           model: this.model,
-          max_tokens: attemptMaxTokens,
           // Stable text first (factuality rules, then task instructions), variable
           // input last — the order prompt caching needs.
-          system: stableInstructions
-            ? [
-                { type: "text" as const, text: SYSTEM_FACTUALITY },
-                { type: "text" as const, text: stableInstructions },
-              ]
+          instructions: stableInstructions
+            ? `${SYSTEM_FACTUALITY}\n\n${stableInstructions}`
             : SYSTEM_FACTUALITY,
-          messages: [{ role: "user", content }],
-          ...budgetFields,
+          input: content,
+          max_output_tokens: attemptMaxTokens,
+          reasoning: { effort: budget.effort },
+          // Do not let the Azure resource retain the response bodies: they contain
+          // the person's own words about their work history.
+          store: false,
         });
         // Log real token usage + estimated cost for every call (even truncated
         // retries, which still bill). This is what makes per-generation cost
         // visible in the server logs.
         logUsage(label, this.model, res.usage, attempt);
-        text = res.content
-          .filter((b): b is Anthropic.TextBlock => b.type === "text")
-          .map((b) => b.text)
-          .join("");
+        text = res.output_text;
         // Truncation → the JSON is incomplete and will never parse. Surface a
         // clear cause in the error details (visible in the API error envelope)
         // and let the retry loop try again with more room to finish.
-        if (res.stop_reason === "max_tokens") {
+        if (res.status === "incomplete" && res.incomplete_details?.reason === "max_output_tokens") {
           truncations += 1;
           lastError = new Error(
-            `Respuesta truncada por max_tokens (max_tokens=${attemptMaxTokens}); el JSON quedó incompleto.`,
+            `Respuesta truncada por max_output_tokens (max_output_tokens=${attemptMaxTokens}); el JSON quedó incompleto.`,
           );
           // No headroom left to grant: another attempt would truncate identically.
           if (attemptMaxTokens >= MODEL_MAX_TOKENS) break;
           continue;
         }
       } catch (err) {
-        // The API rejected thinking/effort: drop them and retry rather than failing
-        // every call in the product. Logged loudly — it means the SDK needs updating.
-        if (Object.keys(budgetFields).length > 0 && rejectsBudgetFields(err)) {
-          console.error(
-            `[ai] ${label}: la API rechazó thinking/output_config; reintentando sin ellos ` +
-              `(costará más). Actualiza @anthropic-ai/sdk. Detalle: ${String(err)}`,
-          );
-          budgetFields = {};
-          continue;
-        }
         // A misconfiguration is not a bad model response: retrying cannot fix it,
         // and reporting it as one sends whoever debugs it looking at prompts and
         // Zod schemas instead of at the API key. Fail on the first attempt with
@@ -304,21 +275,34 @@ export class AnthropicProvider implements AIProvider {
 /**
  * Names the failures that come from how this server is configured rather than
  * from what the model returned — an invalid/revoked key, a key without access to
- * the configured model, a model id that does not exist. Returns null for
- * everything a retry can plausibly fix (rate limits, overloads, timeouts, 5xx).
+ * the deployment, a deployment name that does not exist, a request the deployment
+ * rejects outright. Returns null for everything a retry can plausibly fix (rate
+ * limits, overloads, timeouts, 5xx).
  *
  * Kept as an explicit allow-list of statuses so a transient failure is never
  * mistaken for a permanent one and given up on.
  */
 function describeConfigurationFailure(err: unknown, model: string): string | null {
-  if (err instanceof Anthropic.AuthenticationError) {
-    return "ANTHROPIC_API_KEY no es válida o fue revocada (401 authentication_error).";
+  if (err instanceof OpenAI.AuthenticationError) {
+    return "AZURE_OPENAI_API_KEY no es válida o fue revocada (401).";
   }
-  if (err instanceof Anthropic.PermissionDeniedError) {
-    return `La ANTHROPIC_API_KEY no tiene permiso para usar el modelo "${model}" (403 permission_error).`;
+  if (err instanceof OpenAI.PermissionDeniedError) {
+    return `La AZURE_OPENAI_API_KEY no tiene permiso para usar el despliegue "${model}" (403).`;
   }
-  if (err instanceof Anthropic.NotFoundError) {
-    return `ANTHROPIC_MODEL="${model}" no existe o no está disponible para esta cuenta (404 not_found_error).`;
+  if (err instanceof OpenAI.NotFoundError) {
+    return (
+      `AZURE_OPENAI_MODEL="${model}" no existe como despliegue en este recurso, o ` +
+      `AZURE_OPENAI_BASE_URL apunta al recurso equivocado (404 DeploymentNotFound).`
+    );
+  }
+  /*
+   * A 400 is a request this deployment will never accept — an effort value it does
+   * not support, a parameter it does not know, or input its content filter blocks.
+   * None of those change on a retry, so they fail fast with the API's own words
+   * rather than burning three calls and reporting "the model returned bad JSON".
+   */
+  if (err instanceof OpenAI.BadRequestError) {
+    return `La API rechazó la petición (400): ${err.message}`;
   }
   return null;
 }
@@ -339,7 +323,10 @@ function logUsage(
   if (!usage) return;
   const input = usage.input_tokens ?? 0;
   const output = usage.output_tokens ?? 0;
-  const cacheRead = usage.cache_read_input_tokens ?? 0;
+  const cached = usage.input_tokens_details?.cached_tokens ?? 0;
+  // Reasoning is billed at output rates but produces nothing we read, so it is
+  // worth seeing on its own: a budget that drifted off `none` shows up here first.
+  const reasoning = usage.output_tokens_details?.reasoning_tokens ?? 0;
   const cost = estimateCostUsd(model, usage);
 
   usageTotals.calls += 1;
@@ -355,7 +342,7 @@ function logUsage(
     `costo≈$${usageTotals.costUsd.toFixed(4)}`;
   console.log(
     `[ai-usage] ${label}${retry} model=${model} in=${input} out=${output} ` +
-      `cache_read=${cacheRead} costo=${costStr} | ${total}`,
+      `reasoning=${reasoning} cached=${cached} costo=${costStr} | ${total}`,
   );
 }
 

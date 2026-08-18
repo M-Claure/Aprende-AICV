@@ -126,7 +126,7 @@ export const AnswerBody = z
     message: "Se requiere una respuesta, decisiones de habilidades, o skipped=true",
   })
   .superRefine((b, ctx) => {
-    // Bound what reaches Anthropic. The limit comes from the catalog entry for
+    // Bound what reaches the model. The limit comes from the catalog entry for
     // this questionId — never from the request — so a crafted body cannot raise
     // its own ceiling. See lib/answer-limits.ts for the cost rationale.
     if (b.rawAnswer === undefined) return;

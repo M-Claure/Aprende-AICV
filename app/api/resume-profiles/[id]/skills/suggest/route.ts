@@ -16,7 +16,7 @@ export async function POST(_request: Request, { params }: { params: { id: string
     await loadOwnedProfile(ctx.store, params.id, ctx.userId);
 
     const state = await assembleProfileState(ctx.store, params.id);
-    // Deterministic skill inference — no Claude call.
+    // Deterministic skill inference — no paid-model call.
     const suggested = await inferAndPersistSkills(ctx.store, ctx.funnelAi, state);
     if (suggested.length > 0) {
       ctx.analytics.track(

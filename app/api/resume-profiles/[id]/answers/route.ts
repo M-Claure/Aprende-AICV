@@ -19,7 +19,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
     const body = AnswerBody.parse(await readJson(request));
 
     const result = await processAnswer(
-      // Funnel steps use the deterministic provider — no Claude tokens per step.
+      // Funnel steps use the deterministic provider — no paid-model tokens per step.
       { store: ctx.store, ai: ctx.funnelAi, analytics: ctx.analytics, userId: ctx.userId },
       {
         profileId: params.id,

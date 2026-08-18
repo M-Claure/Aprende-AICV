@@ -10,9 +10,9 @@ import { resolveUserEmail, resolveUserId } from "@/lib/auth";
 export interface RequestContext {
   userId: string;
   store: Store;
-  /** Configured provider (Claude when enabled) — generation + analysis only. */
+  /** Configured provider (Azure OpenAI when enabled) — generation + analysis only. */
   ai: AIProvider;
-  /** Deterministic provider — per-step funnel/capture ops (never Claude). */
+  /** Deterministic provider — per-step funnel/capture ops (never the paid model). */
   funnelAi: AIProvider;
   analytics: Analytics;
 }

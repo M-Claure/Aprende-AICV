@@ -11,7 +11,7 @@ export function GET() {
       status: "ok",
       aiProvider: env.AI_PROVIDER,
       persistence: env.PERSISTENCE,
-      model: env.AI_PROVIDER === "anthropic" ? env.ANTHROPIC_MODEL : null,
+      model: env.AI_PROVIDER === "azure" ? env.AZURE_OPENAI_MODEL : null,
     },
   });
 }

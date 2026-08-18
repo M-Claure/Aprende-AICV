@@ -6,7 +6,7 @@
  *  - never marks a skill confirmed.
  *
  * Every returned value is parsed through the shared Zod schema, so the mock is
- * guaranteed to satisfy the same contract as AnthropicProvider.
+ * guaranteed to satisfy the same contract as AzureOpenAIProvider.
  */
 import type {
   AIProvider,
@@ -121,7 +121,7 @@ function parseLanguages(raw: string): Array<{ name: string; speakingLevel: MockL
 /**
  * Deterministic best-effort parse of a free-text certifications answer: split
  * multiple certificates and pull out an issue year. Issuing-organization
- * detection is left to Claude (too ambiguous for a heuristic).
+ * detection is left to the model (too ambiguous for a heuristic).
  */
 function parseCertifications(raw: string): Array<{ name: string; issueDate?: string }> {
   const out: Array<{ name: string; issueDate?: string }> = [];
@@ -523,7 +523,7 @@ export class MockAIProvider implements AIProvider {
 
 /**
  * Turn one experience entry into several professional bullets from its captured
- * facts. Honest expansion only — no invented metrics or claims. (The Anthropic
+ * facts. Honest expansion only — no invented metrics or claims. (The Azure OpenAI
  * provider does richer semantic rewording via the prompt.)
  */
 function buildExperienceBullets(e: ResumeGenerationInput["experience"][number]) {

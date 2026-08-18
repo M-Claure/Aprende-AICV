@@ -271,7 +271,7 @@ describe("ResumeContentSchema — tolerant of string bullets (regression)", () =
 
 describe("ResumeContentSchema — tolerant of container field-name drift (regression)", () => {
   it("normalizes `id`→`entryId`, `skills`→`skillIds`, and education `bullets`→`details`", () => {
-    // What claude-sonnet-5 actually returns when the prompt doesn't pin the exact
+    // What the model actually returns when the prompt doesn't pin the exact
     // field names: block key `id` instead of `entryId`, `skills` instead of
     // `skillIds`. Before the preprocess step this failed Zod on every retry and
     // surfaced as a 502 / "La IA no devolvió una respuesta válida."

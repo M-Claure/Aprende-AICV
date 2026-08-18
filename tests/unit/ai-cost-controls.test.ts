@@ -1,14 +1,13 @@
 /**
  * Cost controls, pinned as behaviour rather than intentions.
  *
- * Two things drive cost per résumé: how many calls reach Claude, and how many
- * output tokens each one spends (thinking is billed at output rates). Both are easy
- * to regress silently — a new question added to a rich section quietly becomes a
- * paid call, and a dropped budget quietly turns thinking back on everywhere.
+ * Two things drive cost per résumé: how many calls reach the paid model, and how
+ * many output tokens each one spends (reasoning is billed at output rates). Both are
+ * easy to regress silently — a new question added to a rich section quietly becomes a
+ * paid call, and a dropped budget quietly turns reasoning back on everywhere.
  */
-import Anthropic from "@anthropic-ai/sdk";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { AnthropicProvider } from "@/lib/ai/anthropic-provider";
+import { describe, expect, it, vi } from "vitest";
+import { AzureOpenAIProvider } from "@/lib/ai/azure-openai-provider";
 import { HybridAIProvider } from "@/lib/ai/hybrid-provider";
 import { buildNormalizerSystemPrompt, buildNormalizerUserPrompt } from "@/lib/ai/prompts";
 import { MockAIProvider } from "@/lib/ai/mock-provider";
@@ -16,6 +15,8 @@ import { computeCompleteness } from "@/lib/question-engine/completeness-engine";
 import { completenessInput, experienceState, personalState } from "../helpers/factories";
 import type { NormalizeAnswerParams } from "@/lib/ai/provider";
 import type { ResumeProfileState } from "@/types";
+
+const BASE_URL = "https://example-resource.cognitiveservices.azure.com/openai/v1";
 
 function state(): ResumeProfileState {
   const base = completenessInput({
@@ -36,21 +37,24 @@ const params = (questionId: string, section: NormalizeAnswerParams["section"], r
 
 /** Captures the request body each operation sends. */
 function capturing() {
-  const provider = new AnthropicProvider("sk-ant-test", "claude-sonnet-5");
+  const provider = new AzureOpenAIProvider("azure-test-key", BASE_URL, "gpt-5.3-codex");
   const create = vi.fn().mockResolvedValue({
-    content: [{ type: "text", text: "{}" }],
-    stop_reason: "end_turn",
+    output_text: "{}",
+    status: "completed",
+    incomplete_details: null,
     usage: { input_tokens: 10, output_tokens: 5 },
   });
-  (provider as unknown as { client: { messages: { create: unknown } } }).client = {
-    messages: { create },
+  (provider as unknown as { client: { responses: { create: unknown } } }).client = {
+    responses: { create },
   };
   return { provider, create };
 }
 
 const bodyOf = (create: ReturnType<typeof vi.fn>) => create.mock.calls[0]![0] as Record<string, unknown>;
+const effortOf = (create: ReturnType<typeof vi.fn>) =>
+  (bodyOf(create).reasoning as { effort: string } | undefined)?.effort;
 
-describe("which answers are worth paying Claude for", () => {
+describe("which answers are worth paying the model for", () => {
   /** Records which side of the hybrid split each answer lands on. */
   function routed() {
     const deterministic = new MockAIProvider();
@@ -63,7 +67,7 @@ describe("which answers are worth paying Claude for", () => {
     return { provider: new HybridAIProvider(capable, deterministic), capableCalls };
   }
 
-  it("sends narrative experience answers to Claude", async () => {
+  it("sends narrative experience answers to the model", async () => {
     const { provider, capableCalls } = routed();
     await provider.normalizeAnswer(params("experience_add", "experience", "Ayudaba en el negocio de mi mamá"));
     await provider.normalizeAnswer(params("experience_daily_tasks", "experience", "Contestaba llamadas"));
@@ -71,7 +75,7 @@ describe("which answers are worth paying Claude for", () => {
     expect(capableCalls).toEqual(["experience_add", "experience_daily_tasks", "experience_results"]);
   });
 
-  it("sends education narratives to Claude, but not education dates", async () => {
+  it("sends education narratives to the model, but not education dates", async () => {
     // One answer holds a level, a school and a subject; the deterministic parser
     // dumped the whole sentence into `credential`, so the résumé showed no school.
     const { provider, capableCalls } = routed();
@@ -82,7 +86,7 @@ describe("which answers are worth paying Claude for", () => {
     expect(capableCalls).toEqual(["education_highest"]);
   });
 
-  it("keeps the mechanical experience answers off Claude entirely", async () => {
+  it("keeps the mechanical experience answers off the model entirely", async () => {
     const { provider, capableCalls } = routed();
     // A counter payload written by the UI, and a date. No wording to interpret.
     await provider.normalizeAnswer(params("experience_type_counts", "experience", '{"caregiving":2}'));
@@ -101,12 +105,12 @@ describe("which answers are worth paying Claude for", () => {
     expect(dates.updates.experienceEntries?.[0]?.startDate).toContain("2019");
   });
 
-  it("never sends the cheap funnel operations to Claude", async () => {
+  it("never sends the cheap funnel operations to the model", async () => {
     const deterministic = new MockAIProvider();
     const capable = new MockAIProvider();
     for (const op of ["planNextQuestion", "suggestSkills"] as const) {
       vi.spyOn(capable, op).mockImplementation(() => {
-        throw new Error(`${op} must not reach Claude`);
+        throw new Error(`${op} must not reach the paid model`);
       });
     }
     const provider = new HybridAIProvider(capable, deterministic);
@@ -119,36 +123,34 @@ describe("which answers are worth paying Claude for", () => {
   });
 });
 
-describe("thinking is spent only where it buys quality", () => {
-  it("disables thinking for answer normalization", async () => {
+describe("reasoning is spent only where it buys quality", () => {
+  it("turns reasoning off entirely for answer normalization", async () => {
     const { provider, create } = capturing();
     await provider.normalizeAnswer(params("experience_add", "experience")).catch(() => {});
-    const body = bodyOf(create);
-    expect(body.thinking).toEqual({ type: "disabled" });
-    expect(body.output_config).toEqual({ effort: "low" });
+    // `none` is not a synonym for "low": the deployment reports 0 reasoning tokens
+    // for it, so this is the cheapest the call can be.
+    expect(effortOf(create)).toBe("none");
   });
 
-  it("disables thinking for interests and proofreading", async () => {
+  it("turns reasoning off for interests and proofreading", async () => {
     for (const call of [
-      (p: AnthropicProvider) => p.extractInterests({ rawAnswer: "me gusta el fútbol", existing: [] }),
-      (p: AnthropicProvider) => p.proofreadResume({ items: [{ id: "a", text: "texto" }] }),
+      (p: AzureOpenAIProvider) => p.extractInterests({ rawAnswer: "me gusta el fútbol", existing: [] }),
+      (p: AzureOpenAIProvider) => p.proofreadResume({ items: [{ id: "a", text: "texto" }] }),
     ]) {
       const { provider, create } = capturing();
       await call(provider).catch(() => {});
-      expect(bodyOf(create).thinking).toEqual({ type: "disabled" });
+      expect(effortOf(create)).toBe("none");
     }
   });
 
-  it("spends the most on the résumé itself: thinking on at high effort", async () => {
+  it("spends the most on the résumé itself: high effort", async () => {
     // Lowering this to `medium` as a cost saving produced visibly thinner résumés,
     // so generation is deliberately NOT where savings come from.
     const { provider, create } = capturing();
     await provider
       .generateResumeContent({ careerGoal: null, targetRole: "Recepcionista", experience: [], education: [], projects: [], skills: [] })
       .catch(() => {});
-    const body = bodyOf(create);
-    expect(body.thinking).toEqual({ type: "adaptive" });
-    expect(body.output_config).toEqual({ effort: "high" });
+    expect(effortOf(create)).toBe("high");
   });
 
   it("keeps the critique at medium — bounded output, not the final text", async () => {
@@ -161,19 +163,24 @@ describe("thinking is spent only where it buys quality", () => {
         allowedQuestionIds: [],
       })
       .catch(() => {});
-    const body = bodyOf(create);
-    expect(body.thinking).toEqual({ type: "adaptive" });
-    expect(body.output_config).toEqual({ effort: "medium" });
+    expect(effortOf(create)).toBe("medium");
   });
 
-  it("sizes max_tokens to the task instead of one blanket ceiling", async () => {
+  it("sizes max_output_tokens to the task instead of one blanket ceiling", async () => {
     const { provider: p1, create: c1 } = capturing();
     await p1.normalizeAnswer(params("experience_add", "experience")).catch(() => {});
     const { provider: p2, create: c2 } = capturing();
     await p2
       .generateResumeContent({ careerGoal: null, targetRole: null, experience: [], education: [], projects: [], skills: [] })
       .catch(() => {});
-    expect(bodyOf(c1).max_tokens).toBeLessThan(bodyOf(c2).max_tokens as number);
+    expect(bodyOf(c1).max_output_tokens).toBeLessThan(bodyOf(c2).max_output_tokens as number);
+  });
+
+  it("never asks the API to retain the person's answers", async () => {
+    // The request bodies carry someone's own words about their work history.
+    const { provider, create } = capturing();
+    await provider.normalizeAnswer(params("experience_add", "experience")).catch(() => {});
+    expect(bodyOf(create).store).toBe(false);
   });
 });
 
@@ -225,38 +232,45 @@ describe("the normalizer prompt only carries the section it is about", () => {
     expect(buildNormalizerSystemPrompt("experience")).not.toContain(answer);
   });
 
-  it("sends the stable half as a system block, ahead of the answer", async () => {
+  it("sends the stable half as `instructions`, ahead of the answer", async () => {
     const { provider, create } = capturing();
     await provider.normalizeAnswer(params("experience_add", "experience", "Atendía clientes")).catch(() => {});
     const body = bodyOf(create);
-    // Two system blocks: factuality rules, then the task instructions. The variable
-    // input is in `messages`, so the whole system prefix is byte-identical per section.
-    expect(Array.isArray(body.system)).toBe(true);
-    const blocks = body.system as Array<{ text: string }>;
-    expect(blocks).toHaveLength(2);
-    expect(blocks[0]!.text).toContain("REGLAS DE VERACIDAD");
-    expect(blocks[1]!.text).toContain("experienceEntries");
-    expect(JSON.stringify(body.system)).not.toContain("Atendía clientes");
-    expect(JSON.stringify(body.messages)).toContain("Atendía clientes");
+    // Factuality rules, then the task instructions. The variable input travels in
+    // `input`, so the whole `instructions` prefix is byte-identical per section —
+    // which is what the platform's automatic prompt caching keys on.
+    const instructions = body.instructions as string;
+    expect(instructions.indexOf("REGLAS DE VERACIDAD")).toBeGreaterThanOrEqual(0);
+    expect(instructions).toContain("experienceEntries");
+    expect(instructions.indexOf("REGLAS DE VERACIDAD")).toBeLessThan(
+      instructions.indexOf("experienceEntries"),
+    );
+    expect(instructions).not.toContain("Atendía clientes");
+    expect(body.input).toContain("Atendía clientes");
   });
 
-  it("keeps one system string for calls with no section schema", async () => {
+  it("carries only the factuality rules for calls with no section schema", async () => {
     const { provider, create } = capturing();
     await provider.extractInterests({ rawAnswer: "fútbol", existing: [] }).catch(() => {});
-    expect(typeof bodyOf(create).system).toBe("string");
+    const instructions = bodyOf(create).instructions as string;
+    expect(instructions).toContain("REGLAS DE VERACIDAD");
+    expect(instructions).not.toContain("experienceEntries");
   });
 });
 
 describe("a truncated response is not retried at the same ceiling", () => {
   function truncating() {
-    const provider = new AnthropicProvider("sk-ant-test", "claude-sonnet-5");
+    const provider = new AzureOpenAIProvider("azure-test-key", BASE_URL, "gpt-5.3-codex");
     const create = vi.fn().mockResolvedValue({
-      content: [{ type: "text", text: '{"professionalSummary":"incompleto' }],
-      stop_reason: "max_tokens",
+      output_text: '{"professionalSummary":"incompleto',
+      // How the Responses API reports running out of room, in place of the
+      // `stop_reason: "max_tokens"` the Messages API used.
+      status: "incomplete",
+      incomplete_details: { reason: "max_output_tokens" },
       usage: { input_tokens: 10, output_tokens: 5 },
     });
-    (provider as unknown as { client: { messages: { create: unknown } } }).client = {
-      messages: { create },
+    (provider as unknown as { client: { responses: { create: unknown } } }).client = {
+      responses: { create },
     };
     return { provider, create };
   }
@@ -267,58 +281,12 @@ describe("a truncated response is not retried at the same ceiling", () => {
       .generateResumeContent({ careerGoal: null, targetRole: null, experience: [], education: [], projects: [], skills: [] })
       .catch(() => {});
 
-    const ceilings = create.mock.calls.map((c) => (c[0] as { max_tokens: number }).max_tokens);
+    const ceilings = create.mock.calls.map((c) => (c[0] as { max_output_tokens: number }).max_output_tokens);
     expect(ceilings.length).toBeGreaterThan(1);
     // Each attempt gets more room than the last — retrying at the same ceiling just
     // pays for the identical truncation again.
     for (let i = 1; i < ceilings.length; i++) {
       expect(ceilings[i]!).toBeGreaterThan(ceilings[i - 1]!);
     }
-  });
-});
-
-describe("the thinking/effort fields survive an old SDK", () => {
-  beforeEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it("retries without them if the API rejects them, instead of failing every call", async () => {
-    const provider = new AnthropicProvider("sk-ant-test", "claude-sonnet-5");
-    const create = vi
-      .fn()
-      // Shaped the way the SDK really surfaces a 400: the offending field name
-      // lives in the response body it embeds, not necessarily in `message`.
-      .mockRejectedValueOnce(
-        new (Anthropic.BadRequestError as unknown as new (
-          s: number,
-          e: unknown,
-          m: string,
-          h: undefined,
-        ) => Error)(
-          400,
-          {
-            type: "error",
-            error: { type: "invalid_request_error", message: "output_config: Extra inputs are not permitted" },
-          },
-          "400 Bad Request",
-          undefined,
-        ),
-      )
-      .mockResolvedValue({
-        content: [{ type: "text", text: '{"interests":["Fútbol"]}' }],
-        stop_reason: "end_turn",
-        usage: { input_tokens: 10, output_tokens: 5 },
-      });
-    (provider as unknown as { client: { messages: { create: unknown } } }).client = {
-      messages: { create },
-    };
-    vi.spyOn(console, "error").mockImplementation(() => {});
-
-    const result = await provider.extractInterests({ rawAnswer: "fútbol", existing: [] });
-    expect(result.interests).toEqual(["Fútbol"]);
-
-    const second = create.mock.calls[1]![0] as Record<string, unknown>;
-    expect(second.thinking).toBeUndefined();
-    expect(second.output_config).toBeUndefined();
   });
 });

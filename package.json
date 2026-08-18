@@ -15,10 +15,10 @@
     "db:reset": "supabase db reset"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.32.1",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.45.4",
     "next": "^14.2.35",
+    "openai": "^7.4.0",
     "puppeteer": "^23.11.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

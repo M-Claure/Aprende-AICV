@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
  * POST /api/resume-profiles/:id/interests/extract
  * Take a free-text interests answer, extract the GENUINE interests (a negation
  * like "not really" yields none), and append them to the profile's interests.
- * Uses the funnel provider (Claude when AI_PROVIDER=anthropic, else deterministic).
+ * Uses the funnel provider (Azure OpenAI when AI_PROVIDER=azure, else deterministic).
  */
 export async function POST(request: Request, { params }: { params: { id: string } }) {
   return handleRoute(async () => {

@@ -1,5 +1,5 @@
 /**
- * Answers are length-capped to bound Anthropic spend. The limit must be resolved
+ * Answers are length-capped to bound model spend. The limit must be resolved
  * from the catalog server-side (never from the request), and the client table
  * must agree with the server so a user can't be shown a field that accepts more
  * than the API will take.

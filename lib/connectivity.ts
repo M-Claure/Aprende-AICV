@@ -20,16 +20,23 @@ let cachedAt = 0;
 /**
  * The URL we probe for reachability. Prefer the app's own Supabase backend when
  * configured (its `/auth/v1/health` endpoint is a cheap 200); otherwise fall
- * back to the Anthropic API host. We only care whether the *network* reaches
- * the host — any HTTP response (even 401/404) proves connectivity; only a
- * network failure or timeout counts as offline.
+ * back to the configured Azure OpenAI endpoint. We only care whether the
+ * *network* reaches the host — any HTTP response (even 401/404) proves
+ * connectivity; only a network failure or timeout counts as offline.
  */
 function probeUrl(): string {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   if (supabaseUrl) {
     return `${supabaseUrl.replace(/\/+$/, "")}/auth/v1/health`;
   }
-  return "https://api.anthropic.com/v1/models";
+  // `lib/env` is server-only and this runs on the Edge runtime, so the raw var is
+  // read directly. An unauthenticated GET is enough: we want a TCP+TLS round trip,
+  // not a valid answer.
+  const azureUrl = process.env.AZURE_OPENAI_BASE_URL;
+  if (azureUrl) {
+    return `${azureUrl.replace(/\/+$/, "")}/models`;
+  }
+  return "https://api.openai.com/v1/models";
 }
 
 /**

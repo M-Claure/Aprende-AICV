@@ -32,9 +32,9 @@ lib/services/answer-pipeline.ts · lib/resume/resume-generator.ts · lib/skills/
    │
 lib/question-engine/*  (completeness-engine, question-catalog, prioritizer, planner)  ← PURE, no I/O
    │                                             │
-lib/repositories/*  (Store interface)     lib/ai/*  (AIProvider: mock ⇆ anthropic)
+lib/repositories/*  (Store interface)     lib/ai/*  (AIProvider: mock ⇆ azure)
    │                                             │
-Supabase (Postgres + Auth + RLS)          @anthropic-ai/sdk (server-only)
+Supabase (Postgres + Auth + RLS)          openai SDK → Azure OpenAI (server-only)
 ```
 
 **Two-layer questioning:**
@@ -44,24 +44,36 @@ Supabase (Postgres + Auth + RLS)          @anthropic-ai/sdk (server-only)
    candidates. `questionId`, `inputType`, `required`, `allowSkip`, and
    `nextAction` come from the **catalog**, never the model.
 
-**Provider split (cost control):** Claude always handles **résumé generation +
-analysis** (`ai`, the end of the funnel and each regenerate). The **funnel
-provider** (`getFunnelProvider()`, exposed as `funnelAi`) is cost-aware:
+**Provider split (cost control):** the paid model always handles **résumé
+generation + analysis** (`ai`, the end of the funnel and each regenerate). The
+**funnel provider** (`getFunnelProvider()`, exposed as `funnelAi`) is cost-aware:
 - `AI_PROVIDER=mock` → a pure `MockAIProvider` (offline, tests, zero tokens).
-- `AI_PROVIDER=anthropic` → a `HybridAIProvider` (`lib/ai/hybrid-provider.ts`) that
-  sends the *narrative* capture that most affects résumé quality to Claude —
+- `AI_PROVIDER=azure` → a `HybridAIProvider` (`lib/ai/hybrid-provider.ts`) that
+  sends the *narrative* capture that most affects résumé quality to the model —
   `normalizeAnswer` for the rich sections (`experience`, `projects`, `languages`,
   `achievements`, `certifications`) and `extractInterests` — while keeping cheap
   ops (question planning, skill inference, simple-field normalization:
   name/contact/career goal/education) on the deterministic mock.
 
+**The AI backend is Azure OpenAI** (`lib/ai/azure-openai-provider.ts`), reached with
+the stock `openai` SDK pointed at the resource's **v1** endpoint
+(`…/openai/v1`) — that surface speaks plain OpenAI wire format, so there is no
+`api-version` parameter and no Azure-specific client. Requests use the **Responses**
+API, the only surface the `*-codex` models are served on, and pass `store: false` so
+the résumé text is not retained server-side. Cost is controlled per operation via
+`reasoning.effort`: `none` for mechanical extraction (verified 0 reasoning tokens),
+`high` for résumé generation, `medium` for the critique. Prompt caching is automatic
+on this platform — no cache markers — which is why stable instructions go in
+`instructions` and the variable input in `input`.
+
 Because prompts drive model output shape, any prompt that returns JSON must
 enumerate the **exact** schema field names + enum values (see
 `buildResumeGenerationPrompt` / `buildNormalizerPrompt`); the corresponding Zod
 schemas add a tolerant `z.preprocess` for common container-name drift
-(`id`→`entryId`, `skills`→`skillIds`, `extractedData`→`updates`). Claude models
-emit a `thinking` block that counts against `max_tokens`, so funnel/generation
-calls use generous ceilings to avoid truncation.
+(`id`→`entryId`, `skills`→`skillIds`, `extractedData`→`updates`). Reasoning tokens
+count against `max_output_tokens`, so funnel/generation calls use generous ceilings
+to avoid truncation, and a truncated reply is retried with *more* room rather than
+the same ceiling.
 
 ### Key modules
 
@@ -72,7 +84,7 @@ calls use generous ceilings to avoid truncation.
 | `lib/repositories/` | `Store` interface + `MemoryStore` (dev/tests) + `SupabaseStore` |
 | `lib/profile-state.ts` | Assembles `ResumeProfileState`, redacts PII, computes completeness |
 | `lib/question-engine/` | completeness · catalog · prioritizer · adaptive planner |
-| `lib/ai/` | `AIProvider` abstraction, `MockAIProvider`, `AnthropicProvider`, prompts, **Zod schemas** |
+| `lib/ai/` | `AIProvider` abstraction, `MockAIProvider`, `AzureOpenAIProvider`, prompts, **Zod schemas** |
 | `lib/skills/` | evidence-backed inference + confirm/reject/edit lifecycle |
 | `lib/services/answer-pipeline.ts` | the spec §9 answer pipeline |
 | `lib/resume/` | generator · HTML renderer · PDF (puppeteer) · source tracing · **analyzer** (improvement loop) · **proofreader** (final spelling/grammar/format pass before finalize) |
@@ -152,17 +164,17 @@ npm run lint               # next lint
 `PERSISTENCE=memory` are rejected at startup (`ONLINE_ONLY` in `lib/env.ts`), and
 a runtime connectivity guard (`lib/connectivity.ts`, wired into `middleware.ts`)
 returns **503** on every request when the host has no network. You must set
-`AI_PROVIDER=anthropic` (+ `ANTHROPIC_API_KEY`) and `PERSISTENCE=supabase`
-(+ Supabase URL/keys) — see `.env.example`. PDF export requires `puppeteer`
-(installed). Note: this intentionally breaks the mock/memory-based unit + e2e
-tests as written (flip `ONLINE_ONLY` to `false` to restore offline test runs).
+`AI_PROVIDER=azure` (+ `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_BASE_URL`) and
+`PERSISTENCE=supabase` (+ Supabase URL/keys) — see `.env.example`. PDF export
+requires `puppeteer` (installed). Note: this intentionally breaks the mock/memory-based
+unit + e2e tests as written (flip `ONLINE_ONLY` to `false` to restore offline test runs).
 
 ## Configuration (env)
 
 All via environment variables; never commit secrets. See `.env.example`.
-`AI_PROVIDER`, `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `NEXT_PUBLIC_SUPABASE_URL`,
-`NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `AMPLITUDE_API_KEY`,
-`PERSISTENCE`.
+`AI_PROVIDER`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_BASE_URL`, `AZURE_OPENAI_MODEL`,
+`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
+`SUPABASE_SERVICE_ROLE_KEY`, `AMPLITUDE_API_KEY`, `PERSISTENCE`.
 
 ## Out of scope (do not add in milestone 1)
 

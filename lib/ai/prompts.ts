@@ -157,7 +157,7 @@ const SECTION_SCHEMAS: Partial<Record<ResumeSection, { fields: string; rules?: s
  * ordering is what makes the block cacheable: prompt caching matches on a prefix,
  * and with the question and answer at the top (as they were) every call had a
  * different prefix and nothing could ever be reused. Caching still has to be turned
- * on — see `AnthropicProvider.normalizeAnswer` — but the shape now allows it.
+ * on — see `AzureOpenAIProvider.normalizeAnswer` — but the shape now allows it.
  */
 export function buildNormalizerSystemPrompt(section: ResumeSection): string {
   const schema = SECTION_SCHEMAS[section];

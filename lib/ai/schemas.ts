@@ -174,7 +174,7 @@ const cappedText = (max: number) =>
  *
  * The model legitimately has no name to give when the answer is a deep-dive about
  * an entry we ALREADY have — a project deep-dive answer talks about tools and
- * outcomes, not about what the project is called — and Claude then returns `""`.
+ * outcomes, not about what the project is called — and the model then returns `""`.
  * A bare `min(1)` turns that into a 502 that discards the user's whole answer, so
  * blank is treated as ABSENT and the caller decides: `entry-enrichment` never
  * needs the name (it updates by id), and the capture path skips the entry.

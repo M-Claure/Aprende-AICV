@@ -175,7 +175,7 @@ describe("processAnswer — no formal employment path", () => {
 });
 
 /**
- * Claude legitimately returns a BLANK identifying name when the answer was a
+ * The model legitimately returns a BLANK identifying name when the answer was a
  * deep-dive about an entry we already have (a project deep-dive describes tools
  * and outcomes, not what the project is called). A `min(1)` on that field used to
  * fail the whole normalization with a 502 — "La IA no devolvió una respuesta

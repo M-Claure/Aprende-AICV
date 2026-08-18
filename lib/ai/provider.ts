@@ -1,6 +1,6 @@
 /**
  * Provider abstraction so the language model can be swapped (spec §2).
- * Implementations: MockAIProvider (deterministic, offline) and AnthropicProvider.
+ * Implementations: MockAIProvider (deterministic, offline) and AzureOpenAIProvider.
  *
  * Every method returns a value already validated against a Zod schema in
  * lib/ai/schemas.ts — callers can trust the shape.

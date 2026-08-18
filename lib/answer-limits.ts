@@ -1,10 +1,10 @@
 /**
- * Per-answer character limits, to bound what we pay Anthropic.
+ * Per-answer character limits, to bound what we pay per call.
  *
  * A long answer is billed twice over:
  *   1. At capture — `buildNormalizerPrompt` embeds `rawAnswer` verbatim, and the
  *      rich sections (experience, projects, languages, achievements,
- *      certifications) route to Claude via HybridAIProvider.
+ *      certifications) route to the model via HybridAIProvider.
  *   2. On every later call — the résumé generation, analysis and proofread
  *      prompts re-send the stored `rawDescription` / `responsibilities` for the
  *      whole profile. So one oversized answer is paid for again on each
@@ -29,7 +29,7 @@ import { getCatalogQuestion } from "@/lib/question-engine/question-catalog";
  * questions the catalog doesn't know, such as analyzer-generated follow-ups.
  */
 export const ANSWER_CHAR_LIMITS: Record<InputType, number> = {
-  // Narrative capture — the cost driver, and the only text Claude rewrites.
+  // Narrative capture — the cost driver, and the only text the model rewrites.
   long_text: 600,
   repeatable_entry: 600,
   // Single facts: a name, a city, a job title.

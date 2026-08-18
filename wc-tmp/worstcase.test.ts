@@ -2,13 +2,13 @@
  * Worst-case cost run: drive the real funnel with every answer padded to its
  * exact charLimit, then exhaust MAX_RESUME_ITERATIONS.
  *
- * Uses the REAL AnthropicProvider (so token counts and cost are actual) but a
+ * Uses the REAL AzureOpenAIProvider (so token counts and cost are actual) but a
  * MemoryStore, so nothing is written to Supabase. Run via vitest to inherit the
  * `@/` alias and the `server-only` stub.
  */
 import { it } from "vitest";
 import { MemoryStore } from "@/lib/repositories/memory-store";
-import { AnthropicProvider } from "@/lib/ai/anthropic-provider";
+import { AzureOpenAIProvider } from "@/lib/ai/azure-openai-provider";
 import { MockAIProvider } from "@/lib/ai/mock-provider";
 import { HybridAIProvider } from "@/lib/ai/hybrid-provider";
 import { processAnswer } from "@/lib/services/answer-pipeline";
@@ -40,15 +40,17 @@ function pad(limit: number): string {
 }
 
 it("worst case cost run", async () => {
-  const API_KEY = process.env.ANTHROPIC_API_KEY;
-  const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5";
-  if (!API_KEY) throw new Error("ANTHROPIC_API_KEY not set");
+  const API_KEY = process.env.AZURE_OPENAI_API_KEY;
+  const BASE_URL = process.env.AZURE_OPENAI_BASE_URL;
+  const MODEL = process.env.AZURE_OPENAI_MODEL ?? "gpt-5.3-codex";
+  if (!API_KEY) throw new Error("AZURE_OPENAI_API_KEY not set");
+  if (!BASE_URL) throw new Error("AZURE_OPENAI_BASE_URL not set");
   const EXPERIENCES = Number(process.env.WC_EXPERIENCES ?? 5);
 
   const DRY = process.env.WC_DRY === "1";
   const mock = new MockAIProvider();
-  const claude = DRY ? mock : new AnthropicProvider(API_KEY, MODEL);
-  const funnelAi = DRY ? mock : new HybridAIProvider(claude, mock);
+  const capable = DRY ? mock : new AzureOpenAIProvider(API_KEY, BASE_URL, MODEL);
+  const funnelAi = DRY ? mock : new HybridAIProvider(capable, mock);
   console.log(DRY ? "[mode] DRY RUN — mock provider, no API cost" : `[mode] REAL — ${MODEL}`);
   const store = new MemoryStore();
   const analytics = { track() {}, identify() {} } as never;
@@ -123,16 +125,16 @@ it("worst case cost run", async () => {
   console.log(`[profile] skills confirmed=${skills.length}`);
 
   console.log("\n=== GENERATE (initial) ===");
-  await generateResume(store, claude, profileId);
+  await generateResume(store, capable, profileId);
 
   for (let i = 1; i <= MAX_RESUME_ITERATIONS; i++) {
     console.log(`\n=== ITERATION ${i}/${MAX_RESUME_ITERATIONS}: analyze + regenerate ===`);
-    await analyzeResume(store, claude, profileId);
-    await generateResume(store, claude, profileId);
+    await analyzeResume(store, capable, profileId);
+    await generateResume(store, capable, profileId);
   }
 
   console.log("\n=== PROOFREAD (finalize) ===");
-  await proofreadAndRerender(store, claude, profileId);
+  await proofreadAndRerender(store, capable, profileId);
 
   console.log(`\n[done] wall clock ${((Date.now() - t0) / 1000).toFixed(1)}s`);
 }, 900_000);

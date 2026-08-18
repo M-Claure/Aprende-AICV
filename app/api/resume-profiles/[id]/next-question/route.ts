@@ -12,7 +12,7 @@ export async function GET(_request: Request, { params }: { params: { id: string 
     const ctx = await getRequestContext();
     await loadOwnedProfile(ctx.store, params.id, ctx.userId);
     const state = await assembleProfileState(ctx.store, params.id);
-    // Next-question planning is deterministic — no Claude call per step.
+    // Next-question planning is deterministic — no paid-model call per step.
     const nextQuestion = await planNextQuestion(state, ctx.funnelAi);
     await recordQuestionShown(ctx, params.id, nextQuestion);
     return ok({ nextQuestion, state });
