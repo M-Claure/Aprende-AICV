@@ -1,37 +1,38 @@
 import type { Config } from "tailwindcss";
+import {
+  COLOR_VARS,
+  FONT_BODY_VAR,
+  FONT_HEADING_VAR,
+  SOFT_SHADOW_VAR,
+  tailwindColor,
+} from "./lib/brand/css-vars";
 
 /**
- * Design tokens for the **Aprende+** brand system.
- * Source: https://aprende-plus-landing.vercel.app/design-system.html
+ * Design tokens for the **multi-brand** system.
  *
- * The palette is "cuatro colores de marca sobre neutros cálidos" — coral, gold,
- * teal and plum over warm neutrals, with one strong accent per block:
- *   coral #FF6F5E (action/CTA) · coral-dk #F0553F (hover)
- *   gold  #FFC24B (warm accents, badges)
- *   teal  #1FB6A6 (community/health) · teal-dk #138B7E (teal text on light)
- *   plum  #3B2E58 (titles, dark anchors) · plum-lt #4A3A6B
- *   cream #FFF9F4 (background) · panel #F7EFEA · ink #2A2340 (text)
- *   grey  #7C748C (secondary text) · line #EADFE6 (borders)
- *   crimson #DB0F3C — RESERVED for the Aprende isotipo mark, never for UI.
+ * No brand's colours appear here. Every token resolves to a CSS custom property
+ * that the active brand's theme block fills in at render time
+ * (`lib/brand/theme-css.ts`, inlined by `app/layout.tsx`). The concrete palettes
+ * live with their brands, in `lib/brand/brands/*.ts`.
  *
- * `accent` is the product's semantic accent, so existing `bg-accent` /
- * `text-accent-dark` / `bg-accent-light` markup picks up the brand automatically.
+ * That indirection is what makes a brand swap free: shared product components
+ * keep the exact class names they already had (`bg-accent`, `text-accent-dark`,
+ * `border-border`), and the values behind them change per request. Adding a brand
+ * touches no CSS and no component.
  *
- * ── Two deliberate departures, both for legibility ────────────────────────────
- * Measured against WCAG 2.1 (4.5:1 for body text, 3:1 for large text and UI):
+ * ## Tokens are semantic, not literal
+ * `accent`, `text-primary`, `border` — never `coral` or `plum`. A literal name
+ * stops being true the moment a second brand exists ("plum" resolving to navy is
+ * worse than no name at all). The literal brand colours are reachable as
+ * `brand-strong` / `brand-mark` / `brand-support` for the marketing layer, which
+ * is the one place a brand is allowed to be specific about itself.
  *
- * 1. `accent.dark` is plum, NOT coral-dk. `text-accent-dark` styles interactive
- *    14px text in ~20 places; coral-dk scores 3.31:1 on cream and fails AA.
- *    Plum scores 11.71:1. Coral is still the action colour everywhere it appears
- *    as a shape (fills, borders, the progress bar), where it reads fine.
- * 2. `accent.on` (label colour for coral fills) is ink, NOT white. White on coral
- *    is 2.73:1 — well under AA; ink on coral is 5.44:1.
+ * Opacity modifiers (`bg-accent/50`) keep working: see the channel-triplet note
+ * in `lib/brand/css-vars.ts`.
  *
- * This matters more than usual here: the audience is low-literacy learners
- * reading Spanish on phones, often in poor light.
- *
- * `accent.light` is the one derived value — coral at 12% over cream — because the
- * system ships no coral tint and selected states need one.
+ * Accessibility decisions (why `accent-dark` is not the accent, why `accent-on`
+ * differs per brand) are documented per brand in `lib/brand/brands/*.ts` and
+ * enforced in `tests/unit/brand-theme.test.ts`.
  */
 const config: Config = {
   content: [
@@ -42,55 +43,50 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        brand: {
-          coral: "#FF6F5E",
-          "coral-dk": "#F0553F",
-          gold: "#FFC24B",
-          teal: "#1FB6A6",
-          "teal-dk": "#138B7E",
-          plum: "#3B2E58",
-          "plum-lt": "#4A3A6B",
-          cream: "#FFF9F4",
-          panel: "#F7EFEA",
-          /** Isotipo mark only — not a UI colour. */
-          crimson: "#DB0F3C",
-          DEFAULT: "#FF6F5E",
-          dark: "#F0553F",
-        },
         accent: {
-          DEFAULT: "#FF6F5E",
-          /** Interactive/emphasis TEXT. Plum for contrast — see note above. */
-          dark: "#3B2E58",
-          /** Coral 12% over cream: selected states, banners, chips. */
-          light: "#FFE8E2",
-          /** Label colour on a coral fill. Ink, not white — see note above. */
-          on: "#2A2340",
+          DEFAULT: tailwindColor(COLOR_VARS.accent),
+          /** Hover state for an accent fill. */
+          hover: tailwindColor(COLOR_VARS.accentHover),
+          /** Interactive/emphasis TEXT — AA-safe on the brand surface. */
+          dark: tailwindColor(COLOR_VARS.accentDark),
+          /** Accent tint: selected states, instruction banners, chips. */
+          light: tailwindColor(COLOR_VARS.accentLight),
+          /** Label colour on an accent fill. */
+          on: tailwindColor(COLOR_VARS.accentOn),
+        },
+        brand: {
+          /** Dark brand anchor: wordmarks and display headings. */
+          strong: tailwindColor(COLOR_VARS.brandStrong),
+          "strong-lt": tailwindColor(COLOR_VARS.brandStrongLight),
+          /** Isotipo mark only — not a UI colour. */
+          mark: tailwindColor(COLOR_VARS.brandMark),
+          support: tailwindColor(COLOR_VARS.brandSupport),
+          "support-alt": tailwindColor(COLOR_VARS.brandSupportAlt),
         },
         text: {
-          primary: "#2A2340",
-          secondary: "#7C748C",
-          inverse: "#FFFFFF",
+          primary: tailwindColor(COLOR_VARS.textPrimary),
+          secondary: tailwindColor(COLOR_VARS.textSecondary),
+          inverse: tailwindColor(COLOR_VARS.textInverse),
         },
-        border: "#EADFE6",
-        "bg-primary": "#FFF9F4",
-        "ai-bubble": "#F7EFEA",
+        border: tailwindColor(COLOR_VARS.border),
+        "bg-primary": tailwindColor(COLOR_VARS.surface),
+        "bg-panel": tailwindColor(COLOR_VARS.panel),
+        /** Alias of `bg-panel`, kept for the chat-bubble markup that predates it. */
+        "ai-bubble": tailwindColor(COLOR_VARS.panel),
       },
       fontFamily: {
-        // Aprende+ pairs Poppins for display type with Inter for body copy. The
-        // vars are set by next/font in app/layout.tsx; the tail of each stack
-        // keeps text readable before the font swaps in.
-        main: ["var(--font-main)", "Inter", "-apple-system", "Segoe UI", "sans-serif"],
-        heading: ["var(--font-heading)", "Poppins", "Segoe UI", "system-ui", "sans-serif"],
+        // Each brand supplies its own stack, including the fallbacks — the leading
+        // entry is the variable `app/fonts.ts` binds via next/font.
+        main: `var(${FONT_BODY_VAR})`,
+        heading: `var(${FONT_HEADING_VAR})`,
       },
       boxShadow: {
-        // --shadow from the design system: a soft plum-tinted lift.
         // NOT named `brand`: Tailwind also derives shadow-COLOR utilities from
         // `colors`, so `shadow-brand` would collide with `colors.brand` and
-        // recolour the shadow coral instead of applying this value.
-        soft: "0 10px 30px rgba(59,46,88,.08)",
+        // recolour the shadow instead of applying this value.
+        soft: `var(${SOFT_SHADOW_VAR})`,
       },
       maxWidth: {
-        // --container
         brand: "1120px",
       },
     },

@@ -2,7 +2,14 @@
 
 import type { ReactNode } from "react";
 
-/** Shared presentational primitives matching the Pencil design tokens. */
+/**
+ * Shared presentational primitives matching the Pencil design tokens.
+ *
+ * Brand-agnostic by construction: every colour here is a *semantic* token
+ * (`accent`, `text-secondary`, `border`) that the active brand fills in via CSS
+ * custom properties, so these components are never touched when a brand is added.
+ * See `docs/branding.md`.
+ */
 
 export function Button({
   children,
@@ -20,8 +27,9 @@ export function Button({
   const base =
     "inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed";
   const styles = {
-    // Ink on coral, not white: white on coral is 2.73:1 and fails AA.
-    primary: "bg-accent text-accent-on hover:bg-brand-coral-dk",
+    // `accent-on` rather than a hard-coded white or ink: the readable label
+    // colour for an accent fill differs per brand (see lib/brand/brands/*.ts).
+    primary: "bg-accent text-accent-on hover:bg-accent-hover",
     secondary: "bg-white text-text-primary border border-border hover:bg-gray-50",
     text: "text-accent-dark hover:underline px-3",
   }[variant];

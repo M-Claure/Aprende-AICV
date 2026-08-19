@@ -1,5 +1,7 @@
 import "server-only";
 import { z } from "zod";
+import { BRAND_IDS, isBrandId } from "@/lib/brand/registry";
+import { parseHostOverrides } from "@/lib/brand/resolve";
 
 /**
  * Server-side environment configuration.
@@ -55,6 +57,42 @@ const EnvSchema = z
     AMPLITUDE_API_KEY: z.string().optional(),
 
     PERSISTENCE: z.enum(["supabase", "memory"]).default("memory"),
+
+    /**
+     * Marketing brand served when the request host matches no brand's `hosts` —
+     * preview deploys (`*.vercel.app`), `localhost`, and single-brand hosting.
+     * Leave unset to fall back to `FALLBACK_BRAND_ID`.
+     *
+     * Declared here so a typo fails at startup instead of silently serving the
+     * wrong brand. Edge middleware still reads `process.env` directly (see
+     * `brandEnv()` in `lib/brand/resolve.ts`) because this module is
+     * `server-only` and cannot be imported there.
+     */
+    DEFAULT_BRAND: z
+      .string()
+      .optional()
+      .refine((value) => value === undefined || isBrandId(value), {
+        message: `DEFAULT_BRAND must be one of: ${BRAND_IDS.join(", ")}`,
+      }),
+
+    /**
+     * Extra `host=brandId` pairs, comma-separated — points a campaign or staging
+     * domain at a brand without a code change. Consulted before each brand's own
+     * `hosts` list. Unparseable entries are ignored at resolution time; this
+     * check only catches a value that parses to nothing at all, which always
+     * means a mistake.
+     */
+    BRAND_HOST_OVERRIDES: z
+      .string()
+      .optional()
+      .refine(
+        (value) => value === undefined || Object.keys(parseHostOverrides(value)).length > 0,
+        {
+          message:
+            "BRAND_HOST_OVERRIDES must be a comma-separated list of host=brandId pairs, " +
+            `e.g. "cv.example.com=${BRAND_IDS[0]}"`,
+        },
+      ),
 
     // Test-only escape hatch: bypass Supabase auth for e2e runs.
     E2E_AUTH_BYPASS: z.string().optional(),

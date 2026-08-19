@@ -4,11 +4,13 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { Button, Card, InstructionBanner } from "@/components/primitives";
+import { useBrand } from "@/lib/brand/context";
 
 type Mode = "signin" | "signup";
 
 export default function LoginPage() {
   const router = useRouter();
+  const brand = useBrand();
   const configured = isSupabaseConfigured();
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
@@ -69,14 +71,13 @@ export default function LoginPage() {
           icon="🔐"
           title={mode === "signin" ? "Entra a tu cuenta" : "Crea tu cuenta"}
         >
-          Necesitas una cuenta para guardar tu currículum y que no se pierda. Escribe tu correo y una
-          contraseña.
+          {brand.auth.bannerBody}
         </InstructionBanner>
       </div>
 
       <Card className="w-full">
         <h1 className="text-xl font-bold">{mode === "signin" ? "Iniciar sesión" : "Crear cuenta"}</h1>
-        <p className="mt-1 text-sm text-text-secondary">Tu currículum para buscar trabajo</p>
+        <p className="mt-1 text-sm text-text-secondary">{brand.auth.subtitle}</p>
 
         <form onSubmit={submit} className="mt-5 flex flex-col gap-3">
           <input

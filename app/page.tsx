@@ -6,7 +6,8 @@ import { api, ApiError } from "@/lib/client/api";
 import { Button, InstructionBanner, Spinner } from "@/components/primitives";
 import { CONTACT_FIELD_CHAR_LIMITS } from "@/lib/answer-limits";
 import { isEmail, isPhone } from "@/lib/personal-contact";
-import { TERMS_LABEL, TERMS_URL } from "@/lib/legal/terms";
+import { useBrand } from "@/lib/brand/context";
+import { MarketingHeroSlot } from "@/components/marketing/MarketingHeroSlot";
 
 /**
  * Two steps before the funnel:
@@ -20,6 +21,9 @@ type Step = "intro" | "contact";
 
 export default function HomePage() {
   const router = useRouter();
+  // Marketing copy, CTA labels and the consent link are per-brand; every field
+  // and validator below is shared product behaviour and stays brand-agnostic.
+  const brand = useBrand();
   const [step, setStep] = useState<Step>("intro");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -103,19 +107,12 @@ export default function HomePage() {
     );
   }
 
-  const steps = [
-    { icon: "💬", text: "Te hacemos preguntas fáciles, una por una." },
-    { icon: "✍️", text: "Tú respondes con tus propias palabras." },
-    { icon: "📄", text: "Nosotros lo escribimos bonito y tú lo descargas." },
-  ];
-
   // ── Paso 2: datos de contacto ──
   if (step === "contact") {
     return (
       <main className="mx-auto flex min-h-page max-w-xl flex-col justify-center gap-4 px-6 py-12">
-        <InstructionBanner icon="✍️" title="Escribe tus datos">
-          Pon tu nombre y cómo te pueden contactar. Esto va en tu currículum para que te puedan
-          llamar.
+        <InstructionBanner icon="✍️" title={brand.contactStep.bannerTitle}>
+          {brand.contactStep.bannerBody}
         </InstructionBanner>
 
         <button
@@ -211,7 +208,7 @@ export default function HomePage() {
             ) : (
               <>
                 <Button type="submit" disabled={!canSubmit}>
-                  Continuar
+                  {brand.contactStep.ctaLabel}
                 </Button>
                 {hint && <p className="text-xs text-text-secondary">{hint}</p>}
               </>
@@ -225,73 +222,14 @@ export default function HomePage() {
   }
 
   // ── Paso 1: presentación ──
+  // The landing pitch is the app's marketing surface, so it is rendered by the
+  // active brand's hero (colours, copy, CTA and layout all come from the brand).
+  // Consent state stays here because it gates profile creation, not styling.
   return (
-    <main className="mx-auto flex min-h-page max-w-2xl flex-col items-center justify-center px-6 py-16 text-center">
-      {/* The product name is in the brand header, so this badge carries the offer instead. */}
-      <span className="mb-4 rounded-full bg-accent-light px-4 py-1 text-sm font-semibold text-accent-dark">
-        Gratis y en español
-      </span>
-
-      <h1 className="font-heading text-4xl font-bold leading-tight text-text-primary">
-        Crea tu currículum para buscar trabajo
-      </h1>
-
-      <p className="mt-4 max-w-lg text-lg leading-relaxed text-text-primary">
-        Un currículum es el papel que muestra lo que sabes hacer. Te ayudamos a hacer el tuyo, paso
-        a paso. Es gratis.
-      </p>
-
-      {/* Cómo funciona: pasos simples, con dibujos */}
-      <ol className="mt-8 flex w-full max-w-md flex-col gap-3 text-left">
-        {steps.map((s, i) => (
-          <li
-            key={i}
-            className="flex items-center gap-4 rounded-2xl border border-border bg-white px-4 py-3"
-          >
-            <span className="text-2xl" aria-hidden>
-              {s.icon}
-            </span>
-            <span className="text-base leading-snug text-text-primary">{s.text}</span>
-          </li>
-        ))}
-      </ol>
-
-      <p className="mt-6 max-w-lg text-base leading-relaxed text-text-secondary">
-        No necesitas haber tenido un trabajo antes. Sirve lo que aprendiste en tu casa, estudiando o
-        ayudando a otros. <strong className="text-text-primary">Solo ponemos lo que tú digas que es verdad.</strong>
-      </p>
-
-      {/* Aviso de privacidad: hay que aceptarlo para empezar */}
-      <div className="mt-8 flex w-full max-w-md items-start gap-3 rounded-2xl border border-border bg-white px-4 py-3 text-left">
-        <input
-          id="accept-terms"
-          type="checkbox"
-          checked={agreed}
-          onChange={(e) => setAgreed(e.target.checked)}
-          className="mt-0.5 h-5 w-5 shrink-0"
-        />
-        <label htmlFor="accept-terms" className="cursor-pointer text-base leading-snug text-text-primary">
-          He leído y acepto el{" "}
-          <a
-            href={TERMS_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-semibold text-accent-dark underline"
-          >
-            {TERMS_LABEL}
-          </a>
-          .
-        </label>
-      </div>
-
-      <div className="mt-6">
-        <Button onClick={() => setStep("contact")} disabled={!agreed}>
-          Empezar
-        </Button>
-      </div>
-      {!agreed && (
-        <p className="mt-2 text-xs text-text-secondary">Marca la casilla para poder empezar.</p>
-      )}
-    </main>
+    <MarketingHeroSlot
+      agreed={agreed}
+      onAgreedChange={setAgreed}
+      onStart={() => setStep("contact")}
+    />
   );
 }

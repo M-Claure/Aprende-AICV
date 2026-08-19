@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { isOnline } from "@/lib/connectivity";
+import { BRAND_COOKIE, BRAND_HEADER, BRAND_QUERY } from "@/lib/brand/constants";
+import { brandEnv, resolveBrand, type BrandResolution } from "@/lib/brand/resolve";
 
 /**
  * Builds the 503 response returned to every request while the host is offline.
@@ -30,11 +32,65 @@ function offlineResponse(request: NextRequest): NextResponse {
 }
 
 /**
+ * Resolve the marketing brand for this request. Done in middleware because it is
+ * the earliest point that sees the host, so the whole render tree — layout,
+ * `generateMetadata`, every Server Component — reads one already-resolved value
+ * instead of each re-deriving it. See `lib/brand/resolve.ts` for the precedence.
+ */
+function resolveBrandForRequest(request: NextRequest): BrandResolution {
+  const { envDefault, hostOverrides } = brandEnv();
+  return resolveBrand({
+    host: request.headers.get("host"),
+    cookie: request.cookies.get(BRAND_COOKIE)?.value ?? null,
+    query: request.nextUrl.searchParams.get(BRAND_QUERY),
+    envDefault,
+    hostOverrides,
+  });
+}
+
+/**
+ * Persist an explicitly chosen brand so the rest of the session keeps it —
+ * `?brand=…` is a one-off on a single URL, and the visitor would otherwise snap
+ * back to the host's brand on the next click.
+ *
+ * Only an *explicit* override is persisted. Writing a host-resolved brand to a
+ * cookie would be a bug: the cookie outranks the host, so a visitor who saw one
+ * brand's domain would keep seeing it after navigating to the other one.
+ *
+ * `?brand=auto` (or any unrecognised value) clears the override and returns to
+ * host-based resolution.
+ */
+function persistBrandCookie(
+  request: NextRequest,
+  response: NextResponse,
+  resolution: BrandResolution,
+): void {
+  const requested = request.nextUrl.searchParams.get(BRAND_QUERY);
+  if (requested === null) return;
+
+  if (resolution.source === "query") {
+    response.cookies.set(BRAND_COOKIE, resolution.brandId, {
+      path: "/",
+      sameSite: "lax",
+      // The browser never reads this — the brand reaches the client as resolved
+      // props — so keep it off `document.cookie`.
+      httpOnly: true,
+      maxAge: 60 * 60 * 24 * 30,
+    });
+    return;
+  }
+
+  response.cookies.delete(BRAND_COOKIE);
+}
+
+/**
  * Runs on every request (except static assets and the health probe — see
- * `config.matcher`). Two responsibilities:
+ * `config.matcher`). Three responsibilities:
  *   1. Online-only guard: block the request with a 503 when the host has no
  *      connectivity to the app's external services (see `lib/connectivity.ts`).
- *   2. Refresh the Supabase auth session so Server Components and route
+ *   2. Brand resolution: stamp the resolved brand on the request so the render
+ *      tree can read it (see `lib/brand/server.ts`).
+ *   3. Refresh the Supabase auth session so Server Components and route
  *      handlers see a valid session.
  */
 export async function middleware(request: NextRequest) {
@@ -43,11 +99,21 @@ export async function middleware(request: NextRequest) {
     return offlineResponse(request);
   }
 
+  const brand = resolveBrandForRequest(request);
+  // Forward the brand on the *request* headers, which is what `headers()` reads
+  // inside Server Components.
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set(BRAND_HEADER, brand.brandId);
+
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
+  persistBrandCookie(request, response, brand);
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !anon) return NextResponse.next();
+  // Still return `response`: it carries the brand header and cookie even when
+  // Supabase is unconfigured.
+  if (!url || !anon) return response;
 
-  const response = NextResponse.next({ request });
   const supabase = createServerClient(url, anon, {
     cookies: {
       getAll: () => request.cookies.getAll(),

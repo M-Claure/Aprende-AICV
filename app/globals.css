@@ -4,23 +4,28 @@
 
 @layer base {
   :root {
-    /* Height of the fixed-height brand header rendered by app/layout.tsx.
-       Screens that want to fill the viewport below it use `.min-h-page`. */
+    /* Fallback only. The active brand overrides this (and every colour, font and
+       shadow token) from the theme block that app/layout.tsx inlines — see
+       lib/brand/theme-css.ts. Kept here so `.min-h-page` still computes if that
+       block is ever missing. */
     --brand-header-h: 4.25rem;
   }
 
-  /* Native form controls default to the browser's blue; tint them brand coral
-     so radios and checkboxes match the rest of the theme. */
+  /* Native form controls default to the browser's blue; tint them with the
+     active brand's accent so radios and checkboxes match the theme. Written as
+     a raw var() rather than theme() because Tailwind's theme() would leave the
+     `<alpha-value>` placeholder unresolved here. */
   input[type="radio"],
   input[type="checkbox"],
   input[type="range"] {
-    accent-color: theme("colors.brand.DEFAULT");
+    accent-color: rgb(var(--c-accent));
   }
 }
 
 @layer utilities {
   /* `min-h-screen` minus the brand header, so full-height screens don't
-     overflow the viewport once the header is stacked above them. */
+     overflow the viewport once the header is stacked above them. The header's
+     height is a brand token, since brands' headers differ in height. */
   .min-h-page {
     min-height: calc(100svh - var(--brand-header-h));
   }
