@@ -3,105 +3,115 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { SupabaseStore } from "@/lib/repositories/supabase-store";
 
 /**
- * Reproduces the PostgREST behaviour that caused "Cannot coerce the result to a
- * single JSON object" (PGRST116): an EMPTY patch body updates nothing and
- * returns ZERO rows, even when the filter matches an existing row. Verified
- * against the live database before writing this stub.
+ * Entry edits against the simplified schema.
+ *
+ * Two behaviours worth pinning, both about the JSONB list model
+ * (`supabase/migrations/0007_simplified_schema.sql`):
+ *
+ *  1. An all-undefined patch writes nothing. It originally mattered because an
+ *     empty PostgREST body returns zero rows and raised PGRST116; it still
+ *     matters because a needless write bumps `revision` and makes any concurrent
+ *     writer lose its optimistic guard and retry.
+ *  2. A real patch rewrites only the target entry inside its array, leaving its
+ *     siblings and the rest of the funnel row untouched.
  */
+
+/** A minimal PostgREST fake covering the query shapes SupabaseStore builds. */
 function stubDb(row: Record<string, unknown>) {
   const calls: { updates: Record<string, unknown>[]; selects: number } = { updates: [], selects: 0 };
+  let current = { ...row };
 
-  const builder = (table: string) => ({
+  const rowResult = () => {
+    calls.selects += 1;
+    return { data: { ...current }, error: null };
+  };
+
+  const from = () => ({
     select() {
-      return {
-        eq() {
-          return {
-            maybeSingle: async () => {
-              calls.selects += 1;
-              return { data: row, error: null };
-            },
-          };
-        },
+      const chain: any = {
+        eq: () => chain,
+        contains: () => chain,
+        limit: () => chain,
+        order: () => chain,
+        maybeSingle: async () => rowResult(),
+        single: async () => rowResult(),
       };
+      return chain;
     },
     update(patch: Record<string, unknown>) {
       calls.updates.push(patch);
-      const empty = Object.keys(patch).length === 0;
-      return {
-        eq() {
-          return {
-            select() {
-              return {
-                single: async () =>
-                  empty
-                    ? {
-                        data: null,
-                        error: {
-                          code: "PGRST116",
-                          message: "Cannot coerce the result to a single JSON object",
-                        },
-                      }
-                    : { data: { ...row, ...patch }, error: null },
-              };
-            },
-          };
-        },
+      current = { ...current, ...patch };
+      const chain: any = {
+        eq: () => chain,
+        select: () => ({
+          ...chain,
+          then: undefined,
+          maybeSingle: async () => ({ data: { ...current }, error: null }),
+          single: async () => ({ data: { ...current }, error: null }),
+        }),
       };
+      // `.update().eq().eq().select()` resolves to a rows array in mutateRow.
+      chain.select = () => Object.assign(Promise.resolve({ data: [{ id: current.id }], error: null }), {
+        maybeSingle: async () => ({ data: { ...current }, error: null }),
+        single: async () => ({ data: { ...current }, error: null }),
+      });
+      return chain;
     },
-    _table: table,
   });
 
-  return { db: { from: builder } as unknown as SupabaseClient, calls };
+  return { db: { from } as unknown as SupabaseClient, calls, read: () => current };
 }
 
-const EXPERIENCE_ROW = {
+const EXPERIENCE = {
   id: "exp-1",
-  resume_profile_id: "p1",
-  experience_type: "family_business",
+  resumeProfileId: "p1",
+  experienceType: "family_business",
   title: "Ayudante",
   organization: null,
   location: null,
-  start_date: null,
-  end_date: null,
-  is_current: false,
-  raw_description: "Ayudaba en el negocio",
+  startDate: null,
+  endDate: null,
+  isCurrent: false,
+  rawDescription: "Ayudaba en el negocio",
   responsibilities: [],
   accomplishments: [],
   tools: [],
-  people_served: null,
+  peopleServed: null,
   metrics: [],
   source: "ai_extracted",
-  confirmation_status: "needs_review",
+  confirmationStatus: "needs_review",
 };
 
+const SIBLING = { ...EXPERIENCE, id: "exp-2", title: "Cajera" };
+
+/** A funnel row carrying two experience entries and one of everything else. */
+const funnelRow = () => ({
+  id: "p1",
+  user_id: "u1",
+  revision: 7,
+  experience: [{ ...EXPERIENCE }, { ...SIBLING }],
+  projects: [{ id: "x", resumeProfileId: "p1", name: "Existente" }],
+  achievements: [{ id: "x", resumeProfileId: "p1", title: "Existente" }],
+  certifications: [{ id: "x", resumeProfileId: "p1", name: "Existente" }],
+  languages: [{ id: "x", resumeProfileId: "p1", name: "Existente" }],
+  skills: [{ id: "x", resumeProfileId: "p1", name: "Existente", status: "suggested" }],
+  education: [{ id: "x", resumeProfileId: "p1", institution: "Existente" }],
+});
+
 describe("SupabaseStore — an all-undefined patch is a no-op, not an error", () => {
-  it("returns the row unchanged instead of throwing PGRST116", async () => {
-    const { db, calls } = stubDb(EXPERIENCE_ROW);
+  it("returns the entry unchanged instead of writing", async () => {
+    const { db, calls } = stubDb(funnelRow());
     const store = new SupabaseStore(db);
 
-    // Every field undefined — what a back-edit produced when the normalizer
-    // returned an entry with no mappable fields.
     const result = await store.updateExperience("exp-1", {});
 
     expect(result.id).toBe("exp-1");
     expect(result.rawDescription).toBe("Ayudaba en el negocio");
-    // It must not even attempt the doomed empty UPDATE.
     expect(calls.updates).toHaveLength(0);
-    expect(calls.selects).toBe(1);
-  });
-
-  it("still issues a real update when there is something to write", async () => {
-    const { db, calls } = stubDb(EXPERIENCE_ROW);
-    const store = new SupabaseStore(db);
-
-    const result = await store.updateExperience("exp-1", { title: "Encargada" });
-
-    expect(result.title).toBe("Encargada");
-    expect(calls.updates).toEqual([{ title: "Encargada" }]);
   });
 
   it("applies to every entity that supports partial updates", async () => {
-    const { db, calls } = stubDb({ id: "x", resume_profile_id: "p1", name: "Existente" });
+    const { db, calls } = stubDb(funnelRow());
     const store = new SupabaseStore(db);
 
     await store.updateProject("x", {});
@@ -112,6 +122,36 @@ describe("SupabaseStore — an all-undefined patch is a no-op, not an error", ()
     await store.updateEducation("x", {});
 
     expect(calls.updates).toHaveLength(0);
-    expect(calls.selects).toBe(6);
+  });
+});
+
+describe("SupabaseStore — a real patch rewrites only its own entry", () => {
+  it("writes the whole array back with just that entry changed", async () => {
+    const { db, calls } = stubDb(funnelRow());
+    const store = new SupabaseStore(db);
+
+    const result = await store.updateExperience("exp-1", { title: "Encargada" });
+
+    expect(result.title).toBe("Encargada");
+    expect(calls.updates).toHaveLength(1);
+
+    const written = calls.updates[0]!;
+    const list = written.experience as Array<Record<string, unknown>>;
+    expect(list).toHaveLength(2);
+    expect(list[0]).toMatchObject({ id: "exp-1", title: "Encargada" });
+    // The sibling must survive the read-modify-write untouched.
+    expect(list[1]).toMatchObject({ id: "exp-2", title: "Cajera" });
+    // Unrelated columns are not part of the patch at all.
+    expect(written).not.toHaveProperty("skills");
+  });
+
+  it("guards the write with the revision it read", async () => {
+    const { db, calls } = stubDb(funnelRow());
+    const store = new SupabaseStore(db);
+
+    await store.updateExperience("exp-1", { title: "Encargada" });
+
+    // Optimistic concurrency: the new revision is the one that was read, plus one.
+    expect(calls.updates[0]).toMatchObject({ revision: 8 });
   });
 });

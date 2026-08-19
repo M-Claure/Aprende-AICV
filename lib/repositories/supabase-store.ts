@@ -16,6 +16,23 @@ import type {
   User,
 } from "@/types";
 import { Errors } from "@/lib/errors";
+import {
+  buildAchievement,
+  buildCertification,
+  buildConversationTurn,
+  buildEducation,
+  buildExperience,
+  buildGeneratedResume,
+  buildLanguage,
+  buildProfile,
+  buildProject,
+  buildSkill,
+  clone,
+  emptyPersonalInformation,
+  emptyQuestionState,
+  nowIso,
+  stripUndefined,
+} from "./funnel-entities";
 import type {
   CreateAchievementInput,
   CreateCertificationInput,
@@ -27,6 +44,8 @@ import type {
   CreateProfileInput,
   CreateProjectInput,
   CreateSkillInput,
+  IterationAnswer,
+  IterationAnswerInput,
   PersonalInformationInput,
   QuestionStateInput,
   Store,
@@ -41,707 +60,625 @@ import type {
 } from "./store";
 
 /**
- * Supabase (Postgres) implementation of Store. All row<->domain mapping is
- * explicit so schema column names (e.g. linkedin_url) stay decoupled from
- * domain field names (linkedInUrl).
+ * Supabase implementation of `Store`, over the simplified 5-table schema
+ * (`supabase/migrations/0007_simplified_schema.sql`).
+ *
+ *   funnel        one row per résumé — profile columns plus the eight capture
+ *                 sections, the funnel Q&A and the question state, as JSONB
+ *   resume_pdfs   one row per generated résumé
+ *   iteration_1/2/3   the improvement round's questions and answers
+ *
+ * ## Why this file is now a third of its former size
+ * The JSONB columns hold the DOMAIN objects verbatim — camelCase, exactly the
+ * shapes in `types/domain.ts`. There is no row↔domain mapping layer to maintain,
+ * and no snake_case translation to get wrong. Entity construction is shared with
+ * `MemoryStore` through `funnel-entities.ts`, so the two stores cannot drift on
+ * defaults (notably: a new skill is always `suggested`).
+ *
+ * ## Concurrency
+ * Editing one entry means rewriting its array, which is a read-modify-write. Every
+ * such write asserts the `revision` it read and bumps it; a lost race re-reads and
+ * retries rather than silently clobbering a concurrent edit. The old schema got
+ * this for free from row-level writes, so it is paid back here explicitly.
  */
-export class SupabaseStore implements Store {
-  constructor(private readonly db: SupabaseClient) {}
 
-  private unwrap<T>(res: { data: T | null; error: any }, notFoundMsg?: string): T {
-    if (res.error) throw Errors.internal(res.error.message);
-    if (res.data == null) throw Errors.notFound(notFoundMsg ?? "Recurso no encontrado");
-    return res.data;
+/** The JSONB list columns on `funnel`, keyed by the domain collection they hold. */
+const LIST_COLUMNS = {
+  education: "education",
+  experience: "experience",
+  skills: "skills",
+  certifications: "certifications",
+  languages: "languages",
+  projects: "projects",
+  achievements: "achievements",
+} as const;
+type ListColumn = (typeof LIST_COLUMNS)[keyof typeof LIST_COLUMNS];
+
+/** Entries all carry a string `id`; that is all the generic helpers need. */
+interface Identified {
+  id: string;
+}
+
+/** How many times a lost optimistic race is retried before giving up. */
+const MAX_WRITE_ATTEMPTS = 4;
+
+type FunnelRow = Record<string, unknown> & { id: string; revision: number };
+
+export class SupabaseStore implements Store {
+  constructor(private readonly client: SupabaseClient) {}
+
+  // ── internals ─────────────────────────────────────────────────────────────
+
+  private async fetchRow(profileId: string): Promise<FunnelRow | null> {
+    const { data, error } = await this.client
+      .from("funnel")
+      .select("*")
+      .eq("id", profileId)
+      .maybeSingle();
+    if (error) throw Errors.internal(error.message);
+    return (data as FunnelRow | null) ?? null;
+  }
+
+  private async requireRow(profileId: string): Promise<FunnelRow> {
+    const row = await this.fetchRow(profileId);
+    if (!row) throw Errors.notFound("Perfil no encontrado");
+    return row;
   }
 
   /**
-   * Apply a partial update by id and return the resulting row.
-   *
-   * PostgREST treats an EMPTY patch body as "update nothing" and returns zero
-   * rows — even when the filter matches an existing row. `.single()` then fails
-   * with PGRST116 ("Cannot coerce the result to a single JSON object"). Since
-   * every field here is optional, a patch where they were all `undefined` is a
-   * legitimate no-op, not an error: return the row unchanged instead of
-   * throwing. Every update path goes through this so the footgun is fixed once.
+   * Find the funnel row holding an entry, given only the entry id — which is all
+   * the `Store` interface passes to `updateExperience(entryId, …)` and friends.
+   * JSONB containment, backed by the GIN indexes the migration creates; RLS keeps
+   * the candidate set to the caller's own rows.
    */
-  private async patchById(
-    table: string,
-    id: string,
-    fields: Record<string, unknown>,
-    notFoundMsg: string,
-  ): Promise<any> {
-    const patch = clean(fields);
-    if (Object.keys(patch).length === 0) {
-      const current = await this.db.from(table).select("*").eq("id", id).maybeSingle();
-      if (current.error) throw Errors.internal(current.error.message);
-      if (current.data == null) throw Errors.notFound(notFoundMsg);
-      return current.data;
-    }
-    const res = await this.db.from(table).update(patch).eq("id", id).select("*").single();
-    return this.unwrap(res, notFoundMsg);
-  }
-
-  // ── Users ──
-  async getUser(userId: string): Promise<User | null> {
-    const { data, error } = await this.db.from("users").select("*").eq("id", userId).maybeSingle();
-    if (error) throw Errors.internal(error.message);
-    return data ? mapUser(data) : null;
-  }
-  async upsertUser(input: { id: string; email: string; preferredLanguage?: string }): Promise<User> {
-    const res = await this.db
-      .from("users")
-      .upsert(
-        { id: input.id, email: input.email, preferred_language: input.preferredLanguage ?? "es" },
-        { onConflict: "id" },
-      )
+  private async fetchRowByEntry(column: ListColumn, entryId: string): Promise<FunnelRow | null> {
+    const { data, error } = await this.client
+      .from("funnel")
       .select("*")
-      .single();
-    return mapUser(this.unwrap(res));
-  }
-
-  // ── Resume profiles ──
-  async createResumeProfile(userId: string, input: CreateProfileInput): Promise<ResumeProfile> {
-    const res = await this.db
-      .from("resume_profiles")
-      .insert({
-        user_id: userId,
-        status: input.status ?? "draft",
-        target_role: input.targetRole ?? null,
-        career_goal: input.careerGoal ?? null,
-        location: input.location ?? null,
-        interests: input.interests ?? [],
-        progress_percentage: input.progressPercentage ?? 0,
-        current_section: input.currentSection ?? "career_goal",
-        terms_accepted_at: input.termsAcceptedAt ?? null,
-        terms_version: input.termsVersion ?? null,
-      })
-      .select("*")
-      .single();
-    return mapProfile(this.unwrap(res));
-  }
-  async getResumeProfile(id: string): Promise<ResumeProfile | null> {
-    const { data, error } = await this.db.from("resume_profiles").select("*").eq("id", id).maybeSingle();
-    if (error) throw Errors.internal(error.message);
-    return data ? mapProfile(data) : null;
-  }
-  async listResumeProfilesByUser(userId: string): Promise<ResumeProfile[]> {
-    const { data, error } = await this.db.from("resume_profiles").select("*").eq("user_id", userId);
-    if (error) throw Errors.internal(error.message);
-    return (data ?? []).map(mapProfile);
-  }
-  async updateResumeProfile(id: string, patch: UpdateProfileInput): Promise<ResumeProfile> {
-    return mapProfile(
-      await this.patchById(
-        "resume_profiles",
-        id,
-        {
-          status: patch.status,
-          target_role: patch.targetRole,
-          career_goal: patch.careerGoal,
-          location: patch.location,
-          interests: patch.interests,
-          progress_percentage: patch.progressPercentage,
-          current_section: patch.currentSection,
-          finalized_at: patch.finalizedAt,
-          terms_accepted_at: patch.termsAcceptedAt,
-          terms_version: patch.termsVersion,
-        },
-        "Perfil no encontrado",
-      ),
-    );
-  }
-
-  // ── Personal information ──
-  async getPersonalInformation(profileId: string): Promise<PersonalInformation | null> {
-    const { data, error } = await this.db
-      .from("personal_information")
-      .select("*")
-      .eq("resume_profile_id", profileId)
+      .contains(column, [{ id: entryId }])
+      .limit(1)
       .maybeSingle();
     if (error) throw Errors.internal(error.message);
-    return data ? mapPersonal(data) : null;
+    return (data as FunnelRow | null) ?? null;
   }
+
+  /**
+   * Apply `mutate` to the funnel row and persist it under an optimistic guard.
+   * `mutate` must be pure — it can run more than once if another write lands first.
+   */
+  private async mutateRow<R>(
+    profileId: string,
+    mutate: (row: FunnelRow) => { patch: Record<string, unknown>; result: R },
+  ): Promise<R> {
+    for (let attempt = 0; attempt < MAX_WRITE_ATTEMPTS; attempt++) {
+      const row = await this.requireRow(profileId);
+      const { patch, result } = mutate(row);
+      const { data, error } = await this.client
+        .from("funnel")
+        .update({ ...patch, revision: row.revision + 1 })
+        .eq("id", profileId)
+        .eq("revision", row.revision)
+        .select("id");
+      if (error) throw Errors.internal(error.message);
+      // Zero rows means another writer bumped `revision` in between: re-read and
+      // reapply rather than overwriting their change.
+      if (data && data.length > 0) return result;
+    }
+    throw Errors.conflict("No se pudo guardar el cambio, inténtalo de nuevo.");
+  }
+
+  private list<T>(row: FunnelRow, column: ListColumn): T[] {
+    return (row[column] as T[] | null) ?? [];
+  }
+
+  private async createInList<T extends Identified>(
+    profileId: string,
+    column: ListColumn,
+    entity: T,
+  ): Promise<T> {
+    return this.mutateRow(profileId, (row) => ({
+      patch: { [column]: [...this.list<T>(row, column), entity] },
+      result: clone(entity),
+    }));
+  }
+
+  private async getFromList<T extends Identified>(
+    column: ListColumn,
+    entryId: string,
+  ): Promise<T | null> {
+    const row = await this.fetchRowByEntry(column, entryId);
+    if (!row) return null;
+    return clone(this.list<T>(row, column).find((e) => e.id === entryId) ?? null);
+  }
+
+  private async listFrom<T>(profileId: string, column: ListColumn): Promise<T[]> {
+    const row = await this.fetchRow(profileId);
+    return row ? clone(this.list<T>(row, column)) : [];
+  }
+
+  private async updateInList<T extends Identified>(
+    column: ListColumn,
+    entryId: string,
+    patch: object,
+    notFound: string,
+    /** Applied after the patch — used by Skill to refresh `updatedAt`. */
+    finalize?: (next: T) => T,
+  ): Promise<T> {
+    const row = await this.fetchRowByEntry(column, entryId);
+    if (!row) throw Errors.notFound(notFound);
+
+    // An all-undefined patch (a back-edit whose normalizer found nothing mappable)
+    // has nothing to write. Skipping it avoids a pointless `revision` bump, which
+    // would make any concurrent writer lose its optimistic guard and retry.
+    if (Object.keys(stripUndefined(patch)).length === 0) {
+      const unchanged = this.list<T>(row, column).find((e) => e.id === entryId);
+      if (!unchanged) throw Errors.notFound(notFound);
+      return clone(unchanged);
+    }
+
+    return this.mutateRow(row.id, (current) => {
+      const items = this.list<T>(current, column);
+      const existing = items.find((e) => e.id === entryId);
+      if (!existing) throw Errors.notFound(notFound);
+      const merged = { ...existing, ...stripUndefined(patch) } as T;
+      const updated = finalize ? finalize(merged) : merged;
+      return {
+        patch: { [column]: items.map((e) => (e.id === entryId ? updated : e)) },
+        result: clone(updated),
+      };
+    });
+  }
+
+  private async deleteFromList(column: ListColumn, entryId: string): Promise<void> {
+    const row = await this.fetchRowByEntry(column, entryId);
+    if (!row) return; // deleting something absent is a no-op, as in MemoryStore
+    await this.mutateRow(row.id, (current) => ({
+      patch: {
+        [column]: this.list<Identified>(current, column).filter((e) => e.id !== entryId),
+      },
+      result: undefined,
+    }));
+  }
+
+  // ── Users ─────────────────────────────────────────────────────────────────
+  // The app `users` table is gone; `funnel.user_id` references auth.users. These
+  // resolve against the session instead, and are only ever called in memory mode
+  // (see `getRequestContext`) — Supabase Auth provisions its own user rows.
+
+  async getUser(userId: string): Promise<User | null> {
+    const { data } = await this.client.auth.getUser();
+    if (!data.user || data.user.id !== userId) return null;
+    return {
+      id: data.user.id,
+      email: data.user.email ?? "",
+      preferredLanguage: "es",
+      onboardingCompleted: false,
+      createdAt: data.user.created_at ?? nowIso(),
+      updatedAt: data.user.updated_at ?? nowIso(),
+    };
+  }
+
+  async upsertUser(input: { id: string; email: string; preferredLanguage?: string }): Promise<User> {
+    return {
+      id: input.id,
+      email: input.email,
+      preferredLanguage: input.preferredLanguage ?? "es",
+      onboardingCompleted: false,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    };
+  }
+
+  // ── Resume profiles ───────────────────────────────────────────────────────
+
+  async createResumeProfile(userId: string, input: CreateProfileInput): Promise<ResumeProfile> {
+    const profile = buildProfile(userId, input);
+    const { error } = await this.client.from("funnel").insert({
+      id: profile.id,
+      user_id: profile.userId,
+      status: profile.status,
+      target_role: profile.targetRole,
+      career_goal: profile.careerGoal,
+      location: profile.location,
+      interests: profile.interests,
+      progress_percentage: profile.progressPercentage,
+      current_section: profile.currentSection,
+      finalized_at: profile.finalizedAt,
+      terms_accepted_at: profile.termsAcceptedAt,
+      terms_version: profile.termsVersion,
+      created_at: profile.createdAt,
+      updated_at: profile.updatedAt,
+    });
+    if (error) throw Errors.internal(error.message);
+    return profile;
+  }
+
+  async getResumeProfile(id: string): Promise<ResumeProfile | null> {
+    const row = await this.fetchRow(id);
+    return row ? toProfile(row) : null;
+  }
+
+  async listResumeProfilesByUser(userId: string): Promise<ResumeProfile[]> {
+    const { data, error } = await this.client.from("funnel").select("*").eq("user_id", userId);
+    if (error) throw Errors.internal(error.message);
+    return ((data ?? []) as FunnelRow[]).map(toProfile);
+  }
+
+  async updateResumeProfile(id: string, patch: UpdateProfileInput): Promise<ResumeProfile> {
+    const columns: Record<string, unknown> = {};
+    const set = (key: string, value: unknown) => {
+      if (value !== undefined) columns[key] = value;
+    };
+    set("status", patch.status);
+    set("target_role", patch.targetRole);
+    set("career_goal", patch.careerGoal);
+    set("location", patch.location);
+    set("interests", patch.interests);
+    set("progress_percentage", patch.progressPercentage);
+    set("current_section", patch.currentSection);
+    set("finalized_at", patch.finalizedAt);
+    set("terms_accepted_at", patch.termsAcceptedAt);
+    set("terms_version", patch.termsVersion);
+
+    const { data, error } = await this.client
+      .from("funnel")
+      .update({ ...columns, updated_at: nowIso() })
+      .eq("id", id)
+      .select("*")
+      .maybeSingle();
+    if (error) throw Errors.internal(error.message);
+    if (!data) throw Errors.notFound("Perfil no encontrado");
+    return toProfile(data as FunnelRow);
+  }
+
+  // ── Personal information (1:1 JSONB) ──────────────────────────────────────
+
+  async getPersonalInformation(profileId: string): Promise<PersonalInformation | null> {
+    const row = await this.fetchRow(profileId);
+    if (!row) return null;
+    const stored = row.personal_information as PersonalInformation | null;
+    // `{}` is the column default and means "never captured", not "captured empty".
+    return stored && Object.keys(stored).length > 0 ? clone(stored) : null;
+  }
+
   async upsertPersonalInformation(
     profileId: string,
     patch: PersonalInformationInput,
   ): Promise<PersonalInformation> {
-    const res = await this.db
-      .from("personal_information")
-      .upsert(
-        {
-          resume_profile_id: profileId,
-          ...clean({
-            first_name: patch.firstName,
-            last_name: patch.lastName,
-            city: patch.city,
-            state: patch.state,
-            country: patch.country,
-            phone: patch.phone,
-            email: patch.email,
-            linkedin_url: patch.linkedInUrl,
-            portfolio_url: patch.portfolioUrl,
-          }),
-        },
-        { onConflict: "resume_profile_id" },
-      )
-      .select("*")
-      .single();
-    return mapPersonal(this.unwrap(res));
+    return this.mutateRow(profileId, (row) => {
+      const stored = row.personal_information as PersonalInformation | null;
+      const existing =
+        stored && Object.keys(stored).length > 0 ? stored : emptyPersonalInformation(profileId);
+      const updated: PersonalInformation = {
+        ...existing,
+        ...stripUndefined(patch),
+        resumeProfileId: profileId,
+      };
+      return { patch: { personal_information: updated }, result: clone(updated) };
+    });
   }
 
-  // ── Education ──
-  async createEducation(profileId: string, input: CreateEducationInput): Promise<EducationEntry> {
-    const res = await this.db
-      .from("education_entries")
-      .insert({
-        resume_profile_id: profileId,
-        institution: input.institution ?? null,
-        credential: input.credential ?? null,
-        field_of_study: input.fieldOfStudy ?? null,
-        location: input.location ?? null,
-        start_date: input.startDate ?? null,
-        end_date: input.endDate ?? null,
-        is_current: input.isCurrent ?? false,
-        relevant_coursework: input.relevantCoursework ?? [],
-        projects: input.projects ?? [],
-        achievements: input.achievements ?? [],
-        source: input.source ?? "user_entered",
-        confirmation_status: input.confirmationStatus ?? "confirmed",
-      })
-      .select("*")
-      .single();
-    return mapEducation(this.unwrap(res));
+  // ── Education ─────────────────────────────────────────────────────────────
+
+  createEducation(profileId: string, input: CreateEducationInput): Promise<EducationEntry> {
+    return this.createInList(profileId, LIST_COLUMNS.education, buildEducation(profileId, input));
   }
-  async getEducation(entryId: string): Promise<EducationEntry | null> {
-    const { data, error } = await this.db.from("education_entries").select("*").eq("id", entryId).maybeSingle();
-    if (error) throw Errors.internal(error.message);
-    return data ? mapEducation(data) : null;
+  getEducation(entryId: string): Promise<EducationEntry | null> {
+    return this.getFromList(LIST_COLUMNS.education, entryId);
   }
-  async listEducation(profileId: string): Promise<EducationEntry[]> {
-    const { data, error } = await this.db
-      .from("education_entries")
-      .select("*")
-      .eq("resume_profile_id", profileId)
-      .order("created_at");
-    if (error) throw Errors.internal(error.message);
-    return (data ?? []).map(mapEducation);
+  listEducation(profileId: string): Promise<EducationEntry[]> {
+    return this.listFrom(profileId, LIST_COLUMNS.education);
   }
-  async updateEducation(entryId: string, patch: UpdateEducationInput): Promise<EducationEntry> {
-    return mapEducation(
-      await this.patchById(
-        "education_entries",
-        entryId,
-        {
-          institution: patch.institution,
-          credential: patch.credential,
-          field_of_study: patch.fieldOfStudy,
-          location: patch.location,
-          start_date: patch.startDate,
-          end_date: patch.endDate,
-          is_current: patch.isCurrent,
-          relevant_coursework: patch.relevantCoursework,
-          projects: patch.projects,
-          achievements: patch.achievements,
-          source: patch.source,
-          confirmation_status: patch.confirmationStatus,
-        },
-        "Entrada de educación no encontrada",
-      ),
+  updateEducation(entryId: string, patch: UpdateEducationInput): Promise<EducationEntry> {
+    return this.updateInList(
+      LIST_COLUMNS.education,
+      entryId,
+      patch,
+      "Entrada de educación no encontrada",
     );
   }
-  async deleteEducation(entryId: string): Promise<void> {
-    const { error } = await this.db.from("education_entries").delete().eq("id", entryId);
-    if (error) throw Errors.internal(error.message);
+  deleteEducation(entryId: string): Promise<void> {
+    return this.deleteFromList(LIST_COLUMNS.education, entryId);
   }
 
-  // ── Experience ──
-  async createExperience(profileId: string, input: CreateExperienceInput): Promise<ExperienceEntry> {
-    const res = await this.db
-      .from("experience_entries")
-      .insert({
-        resume_profile_id: profileId,
-        experience_type: input.experienceType,
-        title: input.title ?? null,
-        organization: input.organization ?? null,
-        location: input.location ?? null,
-        start_date: input.startDate ?? null,
-        end_date: input.endDate ?? null,
-        is_current: input.isCurrent ?? false,
-        raw_description: input.rawDescription ?? null,
-        responsibilities: input.responsibilities ?? [],
-        accomplishments: input.accomplishments ?? [],
-        tools: input.tools ?? [],
-        people_served: input.peopleServed ?? null,
-        metrics: input.metrics ?? [],
-        source: input.source ?? "user_entered",
-        confirmation_status: input.confirmationStatus ?? "confirmed",
-      })
-      .select("*")
-      .single();
-    return mapExperience(this.unwrap(res));
+  // ── Experience ────────────────────────────────────────────────────────────
+
+  createExperience(profileId: string, input: CreateExperienceInput): Promise<ExperienceEntry> {
+    return this.createInList(profileId, LIST_COLUMNS.experience, buildExperience(profileId, input));
   }
-  async getExperience(entryId: string): Promise<ExperienceEntry | null> {
-    const { data, error } = await this.db.from("experience_entries").select("*").eq("id", entryId).maybeSingle();
-    if (error) throw Errors.internal(error.message);
-    return data ? mapExperience(data) : null;
+  getExperience(entryId: string): Promise<ExperienceEntry | null> {
+    return this.getFromList(LIST_COLUMNS.experience, entryId);
   }
-  async listExperience(profileId: string): Promise<ExperienceEntry[]> {
-    const { data, error } = await this.db
-      .from("experience_entries")
-      .select("*")
-      .eq("resume_profile_id", profileId)
-      .order("created_at");
-    if (error) throw Errors.internal(error.message);
-    return (data ?? []).map(mapExperience);
+  listExperience(profileId: string): Promise<ExperienceEntry[]> {
+    return this.listFrom(profileId, LIST_COLUMNS.experience);
   }
-  async updateExperience(entryId: string, patch: UpdateExperienceInput): Promise<ExperienceEntry> {
-    return mapExperience(
-      await this.patchById(
-        "experience_entries",
-        entryId,
-        {
-          experience_type: patch.experienceType,
-          title: patch.title,
-          organization: patch.organization,
-          location: patch.location,
-          start_date: patch.startDate,
-          end_date: patch.endDate,
-          is_current: patch.isCurrent,
-          raw_description: patch.rawDescription,
-          responsibilities: patch.responsibilities,
-          accomplishments: patch.accomplishments,
-          tools: patch.tools,
-          people_served: patch.peopleServed,
-          metrics: patch.metrics,
-          source: patch.source,
-          confirmation_status: patch.confirmationStatus,
-        },
-        "Entrada de experiencia no encontrada",
-      ),
+  updateExperience(entryId: string, patch: UpdateExperienceInput): Promise<ExperienceEntry> {
+    return this.updateInList(
+      LIST_COLUMNS.experience,
+      entryId,
+      patch,
+      "Entrada de experiencia no encontrada",
     );
   }
-  async deleteExperience(entryId: string): Promise<void> {
-    const { error } = await this.db.from("experience_entries").delete().eq("id", entryId);
-    if (error) throw Errors.internal(error.message);
+  deleteExperience(entryId: string): Promise<void> {
+    return this.deleteFromList(LIST_COLUMNS.experience, entryId);
   }
 
-  // ── Skills ──
+  // ── Skills ────────────────────────────────────────────────────────────────
+
   async createSkill(profileId: string, input: CreateSkillInput): Promise<Skill> {
-    const res = await this.db
-      .from("skills")
-      .insert({
-        resume_profile_id: profileId,
-        name: input.name,
-        category: input.category ?? "general",
-        proficiency: input.proficiency ?? null,
-        origin: input.origin ?? "user_entered",
-        evidence: input.evidence ?? null,
-        source_entry_id: input.sourceEntryId ?? null,
-        status: input.status ?? "suggested",
-      })
-      .select("*")
-      .single();
-    if (res.error?.code === "23505") throw Errors.conflict("La habilidad ya existe");
-    return mapSkill(this.unwrap(res));
+    if (await this.findSkillByName(profileId, input.name)) {
+      throw Errors.conflict("La habilidad ya existe");
+    }
+    return this.createInList(profileId, LIST_COLUMNS.skills, buildSkill(profileId, input));
   }
-  async getSkill(skillId: string): Promise<Skill | null> {
-    const { data, error } = await this.db.from("skills").select("*").eq("id", skillId).maybeSingle();
-    if (error) throw Errors.internal(error.message);
-    return data ? mapSkill(data) : null;
+  getSkill(skillId: string): Promise<Skill | null> {
+    return this.getFromList(LIST_COLUMNS.skills, skillId);
   }
-  async listSkills(profileId: string): Promise<Skill[]> {
-    const { data, error } = await this.db.from("skills").select("*").eq("resume_profile_id", profileId);
-    if (error) throw Errors.internal(error.message);
-    return (data ?? []).map(mapSkill);
+  listSkills(profileId: string): Promise<Skill[]> {
+    return this.listFrom(profileId, LIST_COLUMNS.skills);
   }
   async findSkillByName(profileId: string, name: string): Promise<Skill | null> {
-    const { data, error } = await this.db
-      .from("skills")
-      .select("*")
-      .eq("resume_profile_id", profileId)
-      .ilike("name", name)
-      .maybeSingle();
-    if (error) throw Errors.internal(error.message);
-    return data ? mapSkill(data) : null;
+    const skills = await this.listSkills(profileId);
+    return skills.find((s) => s.name.toLowerCase() === name.toLowerCase()) ?? null;
   }
-  async updateSkill(skillId: string, patch: UpdateSkillInput): Promise<Skill> {
-    return mapSkill(
-      await this.patchById(
-        "skills",
-        skillId,
-        {
-          name: patch.name,
-          category: patch.category,
-          proficiency: patch.proficiency,
-          origin: patch.origin,
-          evidence: patch.evidence,
-          source_entry_id: patch.sourceEntryId,
-          status: patch.status,
-        },
-        "Habilidad no encontrada",
-      ),
+  updateSkill(skillId: string, patch: UpdateSkillInput): Promise<Skill> {
+    return this.updateInList<Skill>(
+      LIST_COLUMNS.skills,
+      skillId,
+      patch,
+      "Habilidad no encontrada",
+      (next) => ({ ...next, updatedAt: nowIso() }),
     );
   }
-  async deleteSkill(skillId: string): Promise<void> {
-    const { error } = await this.db.from("skills").delete().eq("id", skillId);
-    if (error) throw Errors.internal(error.message);
+  deleteSkill(skillId: string): Promise<void> {
+    return this.deleteFromList(LIST_COLUMNS.skills, skillId);
   }
 
-  // ── Certifications ──
-  async createCertification(profileId: string, input: CreateCertificationInput): Promise<Certification> {
-    const res = await this.db
-      .from("certifications")
-      .insert({
-        resume_profile_id: profileId,
-        name: input.name,
-        issuing_organization: input.issuingOrganization ?? null,
-        issue_date: input.issueDate ?? null,
-        expiration_date: input.expirationDate ?? null,
-        credential_id: input.credentialId ?? null,
-        credential_url: input.credentialUrl ?? null,
-        confirmation_status: input.confirmationStatus ?? "confirmed",
-      })
-      .select("*")
-      .single();
-    return mapCertification(this.unwrap(res));
-  }
-  async getCertification(id: string): Promise<Certification | null> {
-    const { data, error } = await this.db.from("certifications").select("*").eq("id", id).maybeSingle();
-    if (error) throw Errors.internal(error.message);
-    return data ? mapCertification(data) : null;
-  }
-  async listCertifications(profileId: string): Promise<Certification[]> {
-    const { data, error } = await this.db.from("certifications").select("*").eq("resume_profile_id", profileId);
-    if (error) throw Errors.internal(error.message);
-    return (data ?? []).map(mapCertification);
-  }
-  async updateCertification(id: string, patch: UpdateCertificationInput): Promise<Certification> {
-    return mapCertification(
-      await this.patchById(
-        "certifications",
-        id,
-        {
-          name: patch.name,
-          issuing_organization: patch.issuingOrganization,
-          issue_date: patch.issueDate,
-          expiration_date: patch.expirationDate,
-          credential_id: patch.credentialId,
-          credential_url: patch.credentialUrl,
-          confirmation_status: patch.confirmationStatus,
-        },
-        "Certificación no encontrada",
-      ),
+  // ── Certifications ────────────────────────────────────────────────────────
+
+  createCertification(profileId: string, input: CreateCertificationInput): Promise<Certification> {
+    return this.createInList(
+      profileId,
+      LIST_COLUMNS.certifications,
+      buildCertification(profileId, input),
     );
   }
-  async deleteCertification(id: string): Promise<void> {
-    const { error } = await this.db.from("certifications").delete().eq("id", id);
-    if (error) throw Errors.internal(error.message);
+  getCertification(id: string): Promise<Certification | null> {
+    return this.getFromList(LIST_COLUMNS.certifications, id);
   }
-
-  // ── Languages ──
-  async createLanguage(profileId: string, input: CreateLanguageInput): Promise<Language> {
-    const res = await this.db
-      .from("languages")
-      .insert({
-        resume_profile_id: profileId,
-        name: input.name,
-        speaking_level: input.speakingLevel ?? null,
-        reading_level: input.readingLevel ?? null,
-        writing_level: input.writingLevel ?? null,
-        include_on_resume: input.includeOnResume ?? true,
-      })
-      .select("*")
-      .single();
-    return mapLanguage(this.unwrap(res));
+  listCertifications(profileId: string): Promise<Certification[]> {
+    return this.listFrom(profileId, LIST_COLUMNS.certifications);
   }
-  async getLanguage(id: string): Promise<Language | null> {
-    const { data, error } = await this.db.from("languages").select("*").eq("id", id).maybeSingle();
-    if (error) throw Errors.internal(error.message);
-    return data ? mapLanguage(data) : null;
-  }
-  async listLanguages(profileId: string): Promise<Language[]> {
-    const { data, error } = await this.db.from("languages").select("*").eq("resume_profile_id", profileId);
-    if (error) throw Errors.internal(error.message);
-    return (data ?? []).map(mapLanguage);
-  }
-  async updateLanguage(id: string, patch: UpdateLanguageInput): Promise<Language> {
-    return mapLanguage(
-      await this.patchById(
-        "languages",
-        id,
-        {
-          name: patch.name,
-          speaking_level: patch.speakingLevel,
-          reading_level: patch.readingLevel,
-          writing_level: patch.writingLevel,
-          include_on_resume: patch.includeOnResume,
-        },
-        "Idioma no encontrado",
-      ),
+  updateCertification(id: string, patch: UpdateCertificationInput): Promise<Certification> {
+    return this.updateInList(
+      LIST_COLUMNS.certifications,
+      id,
+      patch,
+      "Certificación no encontrada",
     );
   }
-  async deleteLanguage(id: string): Promise<void> {
-    const { error } = await this.db.from("languages").delete().eq("id", id);
-    if (error) throw Errors.internal(error.message);
+  deleteCertification(id: string): Promise<void> {
+    return this.deleteFromList(LIST_COLUMNS.certifications, id);
   }
 
-  // ── Projects ──
-  async createProject(profileId: string, input: CreateProjectInput): Promise<Project> {
-    const res = await this.db
-      .from("projects")
-      .insert({
-        resume_profile_id: profileId,
-        name: input.name,
-        project_type: input.projectType ?? null,
-        organization: input.organization ?? null,
-        start_date: input.startDate ?? null,
-        end_date: input.endDate ?? null,
-        description: input.description ?? null,
-        responsibilities: input.responsibilities ?? [],
-        outcomes: input.outcomes ?? [],
-        tools: input.tools ?? [],
-        confirmation_status: input.confirmationStatus ?? "confirmed",
-      })
-      .select("*")
-      .single();
-    return mapProject(this.unwrap(res));
+  // ── Languages ─────────────────────────────────────────────────────────────
+
+  createLanguage(profileId: string, input: CreateLanguageInput): Promise<Language> {
+    return this.createInList(profileId, LIST_COLUMNS.languages, buildLanguage(profileId, input));
   }
-  async getProject(id: string): Promise<Project | null> {
-    const { data, error } = await this.db.from("projects").select("*").eq("id", id).maybeSingle();
-    if (error) throw Errors.internal(error.message);
-    return data ? mapProject(data) : null;
+  getLanguage(id: string): Promise<Language | null> {
+    return this.getFromList(LIST_COLUMNS.languages, id);
   }
-  async listProjects(profileId: string): Promise<Project[]> {
-    const { data, error } = await this.db.from("projects").select("*").eq("resume_profile_id", profileId);
-    if (error) throw Errors.internal(error.message);
-    return (data ?? []).map(mapProject);
+  listLanguages(profileId: string): Promise<Language[]> {
+    return this.listFrom(profileId, LIST_COLUMNS.languages);
   }
-  async updateProject(id: string, patch: UpdateProjectInput): Promise<Project> {
-    return mapProject(
-      await this.patchById(
-        "projects",
-        id,
-        {
-          name: patch.name,
-          project_type: patch.projectType,
-          organization: patch.organization,
-          start_date: patch.startDate,
-          end_date: patch.endDate,
-          description: patch.description,
-          responsibilities: patch.responsibilities,
-          outcomes: patch.outcomes,
-          tools: patch.tools,
-          confirmation_status: patch.confirmationStatus,
-        },
-        "Proyecto no encontrado",
-      ),
+  updateLanguage(id: string, patch: UpdateLanguageInput): Promise<Language> {
+    return this.updateInList(LIST_COLUMNS.languages, id, patch, "Idioma no encontrado");
+  }
+  deleteLanguage(id: string): Promise<void> {
+    return this.deleteFromList(LIST_COLUMNS.languages, id);
+  }
+
+  // ── Projects ──────────────────────────────────────────────────────────────
+
+  createProject(profileId: string, input: CreateProjectInput): Promise<Project> {
+    return this.createInList(profileId, LIST_COLUMNS.projects, buildProject(profileId, input));
+  }
+  getProject(id: string): Promise<Project | null> {
+    return this.getFromList(LIST_COLUMNS.projects, id);
+  }
+  listProjects(profileId: string): Promise<Project[]> {
+    return this.listFrom(profileId, LIST_COLUMNS.projects);
+  }
+  updateProject(id: string, patch: UpdateProjectInput): Promise<Project> {
+    return this.updateInList(LIST_COLUMNS.projects, id, patch, "Proyecto no encontrado");
+  }
+  deleteProject(id: string): Promise<void> {
+    return this.deleteFromList(LIST_COLUMNS.projects, id);
+  }
+
+  // ── Achievements ──────────────────────────────────────────────────────────
+
+  createAchievement(profileId: string, input: CreateAchievementInput): Promise<Achievement> {
+    return this.createInList(
+      profileId,
+      LIST_COLUMNS.achievements,
+      buildAchievement(profileId, input),
     );
   }
-  async deleteProject(id: string): Promise<void> {
-    const { error } = await this.db.from("projects").delete().eq("id", id);
-    if (error) throw Errors.internal(error.message);
+  getAchievement(id: string): Promise<Achievement | null> {
+    return this.getFromList(LIST_COLUMNS.achievements, id);
+  }
+  listAchievements(profileId: string): Promise<Achievement[]> {
+    return this.listFrom(profileId, LIST_COLUMNS.achievements);
+  }
+  updateAchievement(id: string, patch: UpdateAchievementInput): Promise<Achievement> {
+    return this.updateInList(LIST_COLUMNS.achievements, id, patch, "Logro no encontrado");
+  }
+  deleteAchievement(id: string): Promise<void> {
+    return this.deleteFromList(LIST_COLUMNS.achievements, id);
   }
 
-  // ── Achievements ──
-  async createAchievement(profileId: string, input: CreateAchievementInput): Promise<Achievement> {
-    const res = await this.db
-      .from("achievements")
-      .insert({
-        resume_profile_id: profileId,
-        title: input.title,
-        organization: input.organization ?? null,
-        date: input.date ?? null,
-        description: input.description ?? null,
-        confirmation_status: input.confirmationStatus ?? "confirmed",
-      })
-      .select("*")
-      .single();
-    return mapAchievement(this.unwrap(res));
-  }
-  async getAchievement(id: string): Promise<Achievement | null> {
-    const { data, error } = await this.db.from("achievements").select("*").eq("id", id).maybeSingle();
-    if (error) throw Errors.internal(error.message);
-    return data ? mapAchievement(data) : null;
-  }
-  async listAchievements(profileId: string): Promise<Achievement[]> {
-    const { data, error } = await this.db.from("achievements").select("*").eq("resume_profile_id", profileId);
-    if (error) throw Errors.internal(error.message);
-    return (data ?? []).map(mapAchievement);
-  }
-  async updateAchievement(id: string, patch: UpdateAchievementInput): Promise<Achievement> {
-    return mapAchievement(
-      await this.patchById(
-        "achievements",
-        id,
-        {
-          title: patch.title,
-          organization: patch.organization,
-          date: patch.date,
-          description: patch.description,
-          confirmation_status: patch.confirmationStatus,
-        },
-        "Logro no encontrado",
-      ),
-    );
-  }
-  async deleteAchievement(id: string): Promise<void> {
-    const { error } = await this.db.from("achievements").delete().eq("id", id);
-    if (error) throw Errors.internal(error.message);
-  }
+  // ── Conversation turns (append-only JSONB log) ────────────────────────────
 
-  // ── Conversation turns ──
   async createConversationTurn(
     profileId: string,
     input: CreateConversationTurnInput,
   ): Promise<ConversationTurn> {
-    const core = {
-      resume_profile_id: profileId,
-      question_id: input.questionId,
-      section: input.section,
-      assistant_message: input.assistantMessage,
-      user_answer: input.userAnswer ?? null,
-      normalized_answer: input.normalizedAnswer ?? null,
-      skipped: input.skipped ?? false,
-    };
-    const telemetry = {
-      time_spent_ms: input.timeSpentMs ?? null,
-      attempt_number: input.attemptNumber ?? 1,
-    };
-    const res = await this.db
-      .from("conversation_turns")
-      .insert({ ...core, ...telemetry })
-      .select("*")
-      .single();
-
-    // The telemetry columns arrive in migration 0005. If the code is deployed
-    // before the migration is applied, save the turn anyway — losing the user's
-    // answer to a missing analytics column is never the right trade.
-    if (res.error && isUnknownColumnError(res.error)) {
-      console.error(
-        "[supabase-store] conversation_turns is missing the 0005 telemetry columns; " +
-          "saving the turn without them. Apply supabase/migrations/0005_funnel_telemetry.sql.",
-      );
-      const retry = await this.db.from("conversation_turns").insert(core).select("*").single();
-      return mapTurn(this.unwrap(retry));
-    }
-    return mapTurn(this.unwrap(res));
+    const turn = buildConversationTurn(profileId, input);
+    return this.mutateRow(profileId, (row) => ({
+      patch: { conversation: [...((row.conversation as ConversationTurn[] | null) ?? []), turn] },
+      result: clone(turn),
+    }));
   }
+
   async listConversationTurns(profileId: string): Promise<ConversationTurn[]> {
-    const { data, error } = await this.db
-      .from("conversation_turns")
-      .select("*")
-      .eq("resume_profile_id", profileId)
-      .order("created_at");
-    if (error) throw Errors.internal(error.message);
-    return (data ?? []).map(mapTurn);
+    const row = await this.fetchRow(profileId);
+    if (!row) return [];
+    return clone((row.conversation as ConversationTurn[] | null) ?? []).sort((a, b) =>
+      a.createdAt.localeCompare(b.createdAt),
+    );
   }
 
-  // ── Question state ──
+  // ── Question state (1:1 JSONB) ────────────────────────────────────────────
+
   async getQuestionState(profileId: string): Promise<QuestionState | null> {
-    const { data, error } = await this.db
-      .from("question_states")
-      .select("*")
-      .eq("resume_profile_id", profileId)
-      .maybeSingle();
-    if (error) throw Errors.internal(error.message);
-    return data ? mapQuestionState(data) : null;
-  }
-  async upsertQuestionState(profileId: string, patch: QuestionStateInput): Promise<QuestionState> {
-    const res = await this.db
-      .from("question_states")
-      .upsert(
-        {
-          resume_profile_id: profileId,
-          ...clean({
-            asked_question_ids: patch.askedQuestionIds,
-            skipped_question_ids: patch.skippedQuestionIds,
-            completed_sections: patch.completedSections,
-            active_section: patch.activeSection,
-            last_question_id: patch.lastQuestionId,
-            last_shown_question_id: patch.lastShownQuestionId,
-            last_shown_at: patch.lastShownAt,
-          }),
-          last_updated_at: new Date().toISOString(),
-        },
-        { onConflict: "resume_profile_id" },
-      )
-      .select("*")
-      .single();
-    return mapQuestionState(this.unwrap(res));
+    const row = await this.fetchRow(profileId);
+    if (!row) return null;
+    const stored = row.question_state as QuestionState | null;
+    return stored && Object.keys(stored).length > 0 ? clone(stored) : null;
   }
 
-  // ── Generated resumes ──
+  async upsertQuestionState(profileId: string, patch: QuestionStateInput): Promise<QuestionState> {
+    return this.mutateRow(profileId, (row) => {
+      const stored = row.question_state as QuestionState | null;
+      const existing =
+        stored && Object.keys(stored).length > 0 ? stored : emptyQuestionState(profileId);
+      const updated: QuestionState = {
+        ...existing,
+        ...stripUndefined(patch),
+        resumeProfileId: profileId,
+        lastUpdatedAt: nowIso(),
+      };
+      return { patch: { question_state: updated }, result: clone(updated) };
+    });
+  }
+
+  // ── Generated résumés (resume_pdfs) ───────────────────────────────────────
+
   async createGeneratedResume(
     profileId: string,
     input: CreateGeneratedResumeInput,
   ): Promise<GeneratedResume> {
-    let version = input.version;
-    if (version == null) {
-      const latest = await this.getLatestGeneratedResume(profileId);
-      version = (latest?.version ?? 0) + 1;
-    }
-    const res = await this.db
-      .from("generated_resumes")
-      .insert({
-        resume_profile_id: profileId,
-        version,
-        professional_summary: input.professionalSummary ?? "",
-        skills: input.skills ?? [],
-        experience: input.experience ?? [],
-        education: input.education ?? [],
-        certifications: input.certifications ?? [],
-        projects: input.projects ?? [],
-        languages: input.languages ?? [],
-        html: input.html ?? "",
-        pdf_url: input.pdfUrl ?? null,
-      })
-      .select("*")
-      .single();
-    return mapGeneratedResume(this.unwrap(res));
-  }
-  async getGeneratedResume(id: string): Promise<GeneratedResume | null> {
-    const { data, error } = await this.db.from("generated_resumes").select("*").eq("id", id).maybeSingle();
+    const latest = await this.getLatestGeneratedResume(profileId);
+    const resume = buildGeneratedResume(profileId, input, (latest?.version ?? 0) + 1);
+    const { error } = await this.client.from("resume_pdfs").insert(toResumeRow(resume));
     if (error) throw Errors.internal(error.message);
-    return data ? mapGeneratedResume(data) : null;
+    return resume;
   }
-  async getLatestGeneratedResume(profileId: string): Promise<GeneratedResume | null> {
-    const { data, error } = await this.db
-      .from("generated_resumes")
+
+  async getGeneratedResume(id: string): Promise<GeneratedResume | null> {
+    const { data, error } = await this.client
+      .from("resume_pdfs")
       .select("*")
-      .eq("resume_profile_id", profileId)
+      .eq("id", id)
+      .maybeSingle();
+    if (error) throw Errors.internal(error.message);
+    return data ? toResume(data) : null;
+  }
+
+  async getLatestGeneratedResume(profileId: string): Promise<GeneratedResume | null> {
+    const { data, error } = await this.client
+      .from("resume_pdfs")
+      .select("*")
+      .eq("funnel_id", profileId)
       .order("version", { ascending: false })
       .limit(1)
       .maybeSingle();
     if (error) throw Errors.internal(error.message);
-    return data ? mapGeneratedResume(data) : null;
+    return data ? toResume(data) : null;
   }
+
   async updateGeneratedResume(
     id: string,
-    patch: Partial<Pick<GeneratedResume, "pdfUrl" | "html">>,
+    patch: Partial<Pick<GeneratedResume, "pdfPath" | "html">>,
   ): Promise<GeneratedResume> {
-    return mapGeneratedResume(
-      await this.patchById(
-        "generated_resumes",
-        id,
-        { pdf_url: patch.pdfUrl, html: patch.html },
-        "Currículum generado no encontrado",
-      ),
-    );
+    const columns: Record<string, unknown> = {};
+    if (patch.pdfPath !== undefined) columns.pdf_path = patch.pdfPath;
+    if (patch.html !== undefined) columns.html = patch.html;
+    const { data, error } = await this.client
+      .from("resume_pdfs")
+      .update(columns)
+      .eq("id", id)
+      .select("*")
+      .maybeSingle();
+    if (error) throw Errors.internal(error.message);
+    if (!data) throw Errors.notFound("Currículum generado no encontrado");
+    return toResume(data);
+  }
+
+  // ── Improvement iterations ────────────────────────────────────────────────
+
+  async getIteration(profileId: string): Promise<number> {
+    const row = await this.fetchRow(profileId);
+    return (row?.iteration as number | undefined) ?? 0;
+  }
+
+  async advanceIteration(profileId: string, max: number): Promise<number> {
+    return this.mutateRow(profileId, (row) => {
+      const next = Math.min(max, ((row.iteration as number | undefined) ?? 0) + 1);
+      return { patch: { iteration: next }, result: next };
+    });
+  }
+
+  async recordIterationAnswer(
+    profileId: string,
+    iteration: number,
+    input: IterationAnswerInput,
+  ): Promise<IterationAnswer> {
+    const { data, error } = await this.client
+      .from(iterationTable(iteration))
+      .insert({
+        funnel_id: profileId,
+        question_id: input.questionId,
+        question: input.question,
+        answer: input.answer ?? null,
+      })
+      .select("*")
+      .single();
+    if (error) throw Errors.internal(error.message);
+    return toIterationAnswer(iteration, data);
+  }
+
+  async listIterationAnswers(profileId: string, iteration: number): Promise<IterationAnswer[]> {
+    const { data, error } = await this.client
+      .from(iterationTable(iteration))
+      .select("*")
+      .eq("funnel_id", profileId)
+      .order("created_at", { ascending: true });
+    if (error) throw Errors.internal(error.message);
+    return (data ?? []).map((r) => toIterationAnswer(iteration, r));
   }
 }
 
-// ── Mappers (row -> domain) ─────────────────────────────────────────────────
-function mapUser(r: any): User {
-  return {
-    id: r.id,
-    email: r.email,
-    preferredLanguage: r.preferred_language,
-    onboardingCompleted: r.onboarding_completed,
-    createdAt: r.created_at,
-    updatedAt: r.updated_at,
-  };
+/**
+ * There is one table per improvement round, so the round number selects the
+ * table. Validated rather than interpolated blindly: `iteration` reaches here
+ * from request handling, and a bad value must be a 400, not a query against an
+ * arbitrary table name.
+ */
+function iterationTable(iteration: number): string {
+  if (!Number.isInteger(iteration) || iteration < 1 || iteration > 3) {
+    throw Errors.validation(`Iteración inválida: ${iteration}`);
+  }
+  return `iteration_${iteration}`;
 }
-function mapProfile(r: any): ResumeProfile {
+
+// ── row ↔ domain (only where columns are not the domain shape) ──────────────
+
+function toProfile(row: FunnelRow): ResumeProfile {
+  const r = row as Record<string, any>;
   return {
     id: r.id,
     userId: r.user_id,
@@ -759,183 +696,54 @@ function mapProfile(r: any): ResumeProfile {
     updatedAt: r.updated_at,
   };
 }
-function mapPersonal(r: any): PersonalInformation {
+
+function toResumeRow(resume: GeneratedResume): Record<string, unknown> {
   return {
-    resumeProfileId: r.resume_profile_id,
-    firstName: r.first_name,
-    lastName: r.last_name,
-    city: r.city,
-    state: r.state,
-    country: r.country,
-    phone: r.phone,
-    email: r.email,
-    linkedInUrl: r.linkedin_url,
-    portfolioUrl: r.portfolio_url,
-  };
-}
-function mapEducation(r: any): EducationEntry {
-  return {
-    id: r.id,
-    resumeProfileId: r.resume_profile_id,
-    institution: r.institution,
-    credential: r.credential,
-    fieldOfStudy: r.field_of_study,
-    location: r.location,
-    startDate: r.start_date,
-    endDate: r.end_date,
-    isCurrent: r.is_current,
-    relevantCoursework: r.relevant_coursework ?? [],
-    projects: r.projects ?? [],
-    achievements: r.achievements ?? [],
-    source: r.source,
-    confirmationStatus: r.confirmation_status,
-  };
-}
-function mapExperience(r: any): ExperienceEntry {
-  return {
-    id: r.id,
-    resumeProfileId: r.resume_profile_id,
-    experienceType: r.experience_type,
-    title: r.title,
-    organization: r.organization,
-    location: r.location,
-    startDate: r.start_date,
-    endDate: r.end_date,
-    isCurrent: r.is_current,
-    rawDescription: r.raw_description,
-    responsibilities: r.responsibilities ?? [],
-    accomplishments: r.accomplishments ?? [],
-    tools: r.tools ?? [],
-    peopleServed: r.people_served,
-    metrics: r.metrics ?? [],
-    source: r.source,
-    confirmationStatus: r.confirmation_status,
-  };
-}
-function mapSkill(r: any): Skill {
-  return {
-    id: r.id,
-    resumeProfileId: r.resume_profile_id,
-    name: r.name,
-    category: r.category,
-    proficiency: r.proficiency,
-    origin: r.origin,
-    evidence: r.evidence,
-    sourceEntryId: r.source_entry_id,
-    status: r.status,
-    createdAt: r.created_at,
-    updatedAt: r.updated_at,
-  };
-}
-function mapCertification(r: any): Certification {
-  return {
-    id: r.id,
-    resumeProfileId: r.resume_profile_id,
-    name: r.name,
-    issuingOrganization: r.issuing_organization,
-    issueDate: r.issue_date,
-    expirationDate: r.expiration_date,
-    credentialId: r.credential_id,
-    credentialUrl: r.credential_url,
-    confirmationStatus: r.confirmation_status,
-  };
-}
-function mapLanguage(r: any): Language {
-  return {
-    id: r.id,
-    resumeProfileId: r.resume_profile_id,
-    name: r.name,
-    speakingLevel: r.speaking_level,
-    readingLevel: r.reading_level,
-    writingLevel: r.writing_level,
-    includeOnResume: r.include_on_resume,
-  };
-}
-function mapProject(r: any): Project {
-  return {
-    id: r.id,
-    resumeProfileId: r.resume_profile_id,
-    name: r.name,
-    projectType: r.project_type,
-    organization: r.organization,
-    startDate: r.start_date,
-    endDate: r.end_date,
-    description: r.description,
-    responsibilities: r.responsibilities ?? [],
-    outcomes: r.outcomes ?? [],
-    tools: r.tools ?? [],
-    confirmationStatus: r.confirmation_status,
-  };
-}
-function mapAchievement(r: any): Achievement {
-  return {
-    id: r.id,
-    resumeProfileId: r.resume_profile_id,
-    title: r.title,
-    organization: r.organization,
-    date: r.date,
-    description: r.description,
-    confirmationStatus: r.confirmation_status,
-  };
-}
-function mapTurn(r: any): ConversationTurn {
-  return {
-    id: r.id,
-    resumeProfileId: r.resume_profile_id,
-    questionId: r.question_id,
-    section: r.section,
-    assistantMessage: r.assistant_message,
-    userAnswer: r.user_answer,
-    normalizedAnswer: r.normalized_answer,
-    skipped: r.skipped,
-    timeSpentMs: r.time_spent_ms ?? null,
-    attemptNumber: r.attempt_number ?? 1,
-    createdAt: r.created_at,
-  };
-}
-function mapQuestionState(r: any): QuestionState {
-  return {
-    resumeProfileId: r.resume_profile_id,
-    askedQuestionIds: r.asked_question_ids ?? [],
-    skippedQuestionIds: r.skipped_question_ids ?? [],
-    completedSections: r.completed_sections ?? [],
-    activeSection: r.active_section,
-    lastQuestionId: r.last_question_id,
-    lastShownQuestionId: r.last_shown_question_id ?? null,
-    lastShownAt: r.last_shown_at ?? null,
-    lastUpdatedAt: r.last_updated_at,
-  };
-}
-function mapGeneratedResume(r: any): GeneratedResume {
-  return {
-    id: r.id,
-    resumeProfileId: r.resume_profile_id,
-    version: r.version,
-    professionalSummary: r.professional_summary,
-    skills: r.skills ?? [],
-    experience: r.experience ?? [],
-    education: r.education ?? [],
-    certifications: r.certifications ?? [],
-    projects: r.projects ?? [],
-    languages: r.languages ?? [],
-    html: r.html,
-    pdfUrl: r.pdf_url,
-    createdAt: r.created_at,
+    id: resume.id,
+    funnel_id: resume.resumeProfileId,
+    version: resume.version,
+    content: {
+      professionalSummary: resume.professionalSummary,
+      skills: resume.skills,
+      experience: resume.experience,
+      education: resume.education,
+      certifications: resume.certifications,
+      projects: resume.projects,
+      languages: resume.languages,
+    },
+    html: resume.html,
+    pdf_path: resume.pdfPath,
+    created_at: resume.createdAt,
   };
 }
 
-/** Remove undefined keys so partial updates don't overwrite columns with null. */
-/**
- * True for "this column does not exist" — PostgREST reports a schema-cache miss
- * as PGRST204, Postgres itself as 42703. Used to tolerate an additive migration
- * that has not been applied yet.
- */
-function isUnknownColumnError(error: { code?: string | null }): boolean {
-  return error.code === "PGRST204" || error.code === "42703";
+function toResume(row: any): GeneratedResume {
+  const c = (row.content ?? {}) as Record<string, any>;
+  return {
+    id: row.id,
+    resumeProfileId: row.funnel_id,
+    version: row.version,
+    professionalSummary: c.professionalSummary ?? "",
+    skills: c.skills ?? [],
+    experience: c.experience ?? [],
+    education: c.education ?? [],
+    certifications: c.certifications ?? [],
+    projects: c.projects ?? [],
+    languages: c.languages ?? [],
+    html: row.html ?? "",
+    pdfPath: row.pdf_path ?? null,
+    createdAt: row.created_at,
+  };
 }
 
-function clean<T extends Record<string, unknown>>(obj: T): Partial<T> {
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(obj)) if (v !== undefined) out[k] = v;
-  return out as Partial<T>;
+function toIterationAnswer(iteration: number, row: any): IterationAnswer {
+  return {
+    id: row.id,
+    resumeProfileId: row.funnel_id,
+    iteration,
+    questionId: row.question_id,
+    question: row.question,
+    answer: row.answer ?? null,
+    createdAt: row.created_at,
+  };
 }

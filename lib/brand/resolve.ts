@@ -7,7 +7,7 @@ import { BRANDS, FALLBACK_BRAND_ID, isBrandId, type BrandId } from "@/lib/brand/
  * ## Why host-based
  * The brand is a property of the *domain the visitor arrived on*, so the host is
  * the only signal that needs no URL noise, no duplicated page files, and no
- * separate deploy: one build serves `aprende.com` and `aprendeplus.com` at the
+ * separate deploy: one build serves `aprende.com` and `rumbolatino.com` at the
  * same time. The alternatives were each worse — a build-time env var forces one
  * deploy per brand, and a path prefix (`/plus/…`) would fork every route.
  *

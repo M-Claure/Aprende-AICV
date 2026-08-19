@@ -36,7 +36,7 @@ lib/services/answer-pipeline.ts · lib/resume/resume-generator.ts · lib/skills/
    │
 lib/question-engine/*  (completeness-engine, question-catalog, prioritizer, planner)  ← PURE, no I/O
    │                                             │
-lib/repositories/*  (Store interface)     lib/ai/*  (AIProvider: mock ⇆ azure)
+lib/repositories/*  (Store)  ·  lib/storage/*  (ResumeFileStore)   lib/ai/*  (AIProvider: mock ⇆ azure)
    │                                             │
 Supabase (Postgres + Auth + RLS)          openai SDK → Azure OpenAI (server-only)
 ```
@@ -88,20 +88,23 @@ the same ceiling.
 | `lib/brand/` | multi-brand system: configs · registry · pure host resolution · `:root` theme emitter · server/client accessors |
 | `components/marketing/` | branded surfaces: shared hero + per-brand headers, dispatched via a registry |
 | `lib/repositories/` | `Store` interface + `MemoryStore` (dev/tests) + `SupabaseStore` |
+| `lib/storage/` | `ResumeFileStore` interface + `MemoryResumeFileStore` + Supabase Storage impl — the saved résumé PDF |
 | `lib/profile-state.ts` | Assembles `ResumeProfileState`, redacts PII, computes completeness |
 | `lib/question-engine/` | completeness · catalog · prioritizer · adaptive planner |
 | `lib/ai/` | `AIProvider` abstraction, `MockAIProvider`, `AzureOpenAIProvider`, prompts, **Zod schemas** |
 | `lib/skills/` | evidence-backed inference + confirm/reject/edit lifecycle |
 | `lib/services/answer-pipeline.ts` | the spec §9 answer pipeline |
-| `lib/resume/` | generator · HTML renderer · PDF (puppeteer) · source tracing · **analyzer** (improvement loop) · **proofreader** (final spelling/grammar/format pass before finalize) |
+| `lib/resume/` | generator · HTML renderer · PDF (puppeteer) · **artifact writer** (saves the PDF on every generation) · source tracing · **analyzer** (improvement loop) · **proofreader** (final spelling/grammar/format pass before finalize) |
 | `lib/analytics/` | Amplitude (HTTP API) with PII allow-list; no-op when unconfigured |
 | `lib/services/funnel-telemetry.ts` | Records a question as *shown* (event + `QuestionState.lastShownQuestionId`) so funnel exit points are visible — see `docs/funnel-analytics.md` |
+| `lib/repositories/funnel-entities.ts` | entity construction shared by every `Store` impl, so `MemoryStore` and `SupabaseStore` cannot drift on defaults |
 | `supabase/migrations/` | SQL schema + RLS |
 
 ## Brand system (multi-brand, one repo)
 
-The app serves **two marketing brands from one build**: `aprende-plus` (warm,
-learner-facing) and `aprende` (Aprende Institute — formal, institutional). See
+The app serves **two marketing brands from one build**: `rumbo-latino` (warm,
+learner-facing, rumbolatino.com) and `aprende` (Aprende Institute — formal,
+institutional). See
 `docs/branding.md` for the full design; the rules that constrain code:
 
 - **Only marketing is branded.** Palette, typography, header, landing hero,
@@ -111,7 +114,7 @@ learner-facing) and `aprende` (Aprende Institute — formal, institutional). See
   `lib/resume/resume-renderer.ts` keeps its own neutral print palette.
 - **The brand is chosen from the request host**, resolved once in `middleware.ts`
   and stamped on `x-brand`. Precedence: `?brand=` → cookie →
-  `BRAND_HOST_OVERRIDES` → host match → `DEFAULT_BRAND` → `aprende-plus`.
+  `BRAND_HOST_OVERRIDES` → host match → `DEFAULT_BRAND` → `rumbo-latino`.
   `lib/brand/resolve.ts` is pure and holds the rules. The brand gates styling and
   copy only — never data access, never a permission.
 - **`BrandConfig` is pure, serializable data** (`lib/brand/brands/*.ts`): no React,
@@ -127,15 +130,20 @@ learner-facing) and `aprende` (Aprende Institute — formal, institutional). See
   values (`brand-strong`, `brand-mark`, `brand-support`) are for the marketing
   layer alone.
 - **Contrast is enforced, not hoped for.** `tests/unit/brand-theme.test.ts` asserts
-  WCAG AA (4.5:1) for every registered brand. Two inherited Aprende+ values sit
-  below AA and are *pinned* as documented exceptions rather than silently changed.
+  WCAG AA (4.5:1) for every registered brand. Four Rumbo Latino pairs sit below AA
+  — its white-on-coral CTA label (2.73:1) and its secondary grey — because those
+  are rumbolatino.com's own values and brand fidelity was chosen over contrast by
+  the product owner. They are *pinned* per brand and per pair, so they cannot
+  widen and a new brand inherits no exemption. See `KNOWN_BELOW_AA` and
+  `docs/branding.md`.
 - **Reuse first, fork deliberately.** Prefer a shared config-driven component with
   a layout variant (`MarketingHero` serves both brands). Register a per-brand
   component only when one component would need a flag per visual decision (the two
   headers). A registered component must be presentational — `brand` as a prop, no
   server APIs.
 - **Adding a brand** = a config file + one line in `lib/brand/registry.ts` + fonts
-  in `app/fonts.ts` + assets in `public/brands/<id>/`. `BrandId` is derived from the
+  in `app/fonts.ts` + assets in `public/brands/<id>/` (icons included — there is no
+  `app/icon.*` convention file, since it would compete with the per-brand ones). `BrandId` is derived from the
   registry keys, so every `Record<BrandId, …>` becomes a compile error until the new
   brand is handled. The brand tests then cover it automatically.
 
@@ -169,13 +177,83 @@ learner-facing) and `aprende` (Aprende Institute — formal, institutional). See
 - We never request or store age, photo, marital status, religion, race, health,
   SSN, or immigration status.
 
+## Saved résumé PDFs
+
+Every generation renders a PDF and **replaces** the profile's stored one, so a user
+always has a current file and a download is a storage read rather than a Chromium
+launch (`docs/` → `supabase/migrations/0006_resume_pdf_storage.sql` explains the
+schema side).
+
+- **One object per profile**, at `<user_id>/<resume_profile_id>/curriculum.pdf` in
+  the private `resumes` bucket, written with `upsert`. Storage cannot grow as a
+  user iterates, and a download can never return a stale version. Older
+  `resume_pdfs` rows are therefore not individually downloadable — there is
+  no version history in the product, and a PDF per version would multiply PII at rest.
+- **The user id must stay the first path segment** — the Storage RLS policies
+  authorize on `(storage.foldername(name))[1] = auth.uid()`. Pinned by
+  `tests/unit/resume-pdf-storage.test.ts`.
+- **The save is best-effort and never throws.** A PDF is derived data; losing a
+  finished résumé because Chromium hiccuped would be far worse than a missing file
+  the download path re-renders (and back-fills) anyway. Failures are logged and
+  visible as the gap between `resume_generated` and `resume_pdf_stored`.
+- **The seam is `ResumeArtifactWriter`** (`lib/resume/resume-artifacts.ts`), injected
+  into `generateResume` / `proofreadAndRerender` — the only two functions that create
+  a `resume_pdfs` row. Enforcing it there rather than in each of the four
+  routes is what makes "every generation replaces the PDF" true by construction. The
+  parameter is optional so unit tests run without Chromium; routes always pass
+  `resumeArtifacts` from the request context.
+- The render runs **inside the generation lock**, so concurrent requests cannot race
+  to overwrite the single stored file with different versions.
+
+## Database schema (5 tables)
+
+```
+funnel        one row per résumé — profile columns + the eight capture sections,
+              the funnel Q&A and the question state, all as JSONB
+resume_pdfs   one row per generated résumé (content + html + pdf_path)
+iteration_1   \
+iteration_2    >  the improvement round's questions and answers
+iteration_3   /
+```
+
+`0007_simplified_schema.sql` collapsed 13 tables into these. The rules that follow
+from it:
+
+- **JSONB columns hold DOMAIN objects verbatim** — camelCase, exactly the shapes in
+  `types/domain.ts`. What the Supabase editor shows is what the app sees, and there
+  is no row↔domain mapping layer to keep in sync.
+- **Entity defaults live in `lib/repositories/funnel-entities.ts`**, shared by both
+  stores. That is what keeps the safety invariant structural: a skill is built
+  `suggested`, so no store can default it to `confirmed`.
+- **Editing one entry rewrites its array.** `SupabaseStore` does that
+  read-modify-write under an optimistic `revision` guard and retries a lost race.
+  Never bypass it with a raw update — a concurrent edit would be lost.
+- **Entry lookups by id use JSONB containment** (`.contains(column, [{id}])`),
+  backed by the GIN indexes the migration creates.
+- **Postgres no longer validates entry shape.** There are no per-entry FKs or CHECKs
+  inside the JSONB; TypeScript and the Zod schemas at the AI boundary are the
+  enforcement. The invariants that matter were always in code (`lib/skills/`,
+  `lib/resume/source-tracing.ts`).
+- **`MAX_RESUME_ITERATIONS` must stay 3** — there is one table per round, so a
+  different cap would address a table that does not exist
+  (`tests/unit/iterations.test.ts` pins this).
+- **The improvement-round counter is server state** (`funnel.iteration`), enforced by
+  `POST /generate`. It used to be localStorage, where clearing site data reset it.
+- The `iteration_N` rows are an **audit log**: the answers are applied to `funnel`
+  through the normal pipeline, so deleting one loses the record, not résumé content.
+- `users` is gone; `funnel.user_id` references `auth.users` directly.
+
 ## Database rules
 
 - Every table has **RLS** enabled; a user can only touch rows under their own
-  `resume_profiles`. `SupabaseStore` relies on RLS as defense-in-depth.
+  `funnel` row. `SupabaseStore` relies on RLS as defense-in-depth.
 - Domain code touches the DB only through the `Store` interface — never raw SQL.
 - The service-role key bypasses RLS and is **server-only** (used only for user
-  provisioning). Schema changes go in a new `supabase/migrations/NNNN_*.sql`.
+  provisioning). Schema changes go in a new `supabase/migrations/NNNN_*.sql`, and
+  are appended to `supabase/apply_all.sql` for fresh-project setup.
+- **Storage** follows the same rule: the `resumes` bucket is private and its
+  `storage.objects` policies restrict every operation to the caller's own folder.
+  Binary artifacts go through the `ResumeFileStore` interface, never a raw client.
 
 ## AI factuality requirements
 

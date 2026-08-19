@@ -15,7 +15,7 @@ describe("brand registry", () => {
   });
 
   it("ships at least the two brands the product supports", () => {
-    expect(BRAND_IDS).toEqual(expect.arrayContaining(["aprende", "aprende-plus"]));
+    expect(BRAND_IDS).toEqual(expect.arrayContaining(["aprende", "rumbo-latino"]));
   });
 
   it("never lets two brands claim the same host", () => {
@@ -31,7 +31,9 @@ describe("brand registry", () => {
 
   it("accepts only registered ids", () => {
     expect(isBrandId("aprende")).toBe(true);
-    expect(isBrandId("aprende-plus")).toBe(true);
+    expect(isBrandId("rumbo-latino")).toBe(true);
+    // The brand this one replaced must not keep resolving.
+    expect(isBrandId("aprende-plus")).toBe(false);
     expect(isBrandId("nope")).toBe(false);
     // Guards against prototype keys being mistaken for brands.
     expect(isBrandId("constructor")).toBe(false);
@@ -49,8 +51,8 @@ describe("host matching", () => {
   it("matches the apex and www hosts of each brand", () => {
     expect(brandIdForHost("aprende.com")).toBe("aprende");
     expect(brandIdForHost("www.aprende.com")).toBe("aprende");
-    expect(brandIdForHost("aprendeplus.com")).toBe("aprende-plus");
-    expect(brandIdForHost("www.aprendeplus.com")).toBe("aprende-plus");
+    expect(brandIdForHost("rumbolatino.com")).toBe("rumbo-latino");
+    expect(brandIdForHost("www.rumbolatino.com")).toBe("rumbo-latino");
   });
 
   it("ignores case, port, trailing dot and surrounding whitespace", () => {
@@ -61,11 +63,11 @@ describe("host matching", () => {
   });
 
   it("matches a `*.` pattern at any subdomain depth but not the apex", () => {
-    // aprende-plus lists `*.aprendeplus.com` plus the apex explicitly.
-    expect(brandIdForHost("promo.aprendeplus.com")).toBe("aprende-plus");
-    expect(brandIdForHost("a.b.aprendeplus.com")).toBe("aprende-plus");
+    // rumbo-latino lists `*.rumbolatino.com` plus the apex explicitly.
+    expect(brandIdForHost("promo.rumbolatino.com")).toBe("rumbo-latino");
+    expect(brandIdForHost("a.b.rumbolatino.com")).toBe("rumbo-latino");
     // A host that merely ends with the same letters must not match.
-    expect(brandIdForHost("notaprendeplus.com")).toBeNull();
+    expect(brandIdForHost("notrumbolatino.com")).toBeNull();
   });
 
   it("returns null for unknown or missing hosts", () => {
@@ -78,9 +80,9 @@ describe("host matching", () => {
 
 describe("host override parsing", () => {
   it("parses host=brand pairs and normalizes the host", () => {
-    expect(parseHostOverrides("CV.Example.com=aprende, promo.example.com=aprende-plus")).toEqual({
+    expect(parseHostOverrides("CV.Example.com=aprende, promo.example.com=rumbo-latino")).toEqual({
       "cv.example.com": "aprende",
-      "promo.example.com": "aprende-plus",
+      "promo.example.com": "rumbo-latino",
     });
   });
 
@@ -99,16 +101,16 @@ describe("resolution precedence", () => {
     expect(
       resolveBrand({
         host: "aprende.com",
-        cookie: "aprende-plus",
-        query: "aprende-plus",
+        cookie: "rumbo-latino",
+        query: "rumbo-latino",
         envDefault: "aprende",
       }),
-    ).toEqual({ brandId: "aprende-plus", source: "query" });
+    ).toEqual({ brandId: "rumbo-latino", source: "query" });
   });
 
   it("uses the cookie when there is no query override", () => {
-    expect(resolveBrand({ host: "aprende.com", cookie: "aprende-plus" })).toEqual({
-      brandId: "aprende-plus",
+    expect(resolveBrand({ host: "aprende.com", cookie: "rumbo-latino" })).toEqual({
+      brandId: "rumbo-latino",
       source: "cookie",
     });
   });
@@ -117,13 +119,13 @@ describe("resolution precedence", () => {
     expect(
       resolveBrand({
         host: "aprende.com",
-        hostOverrides: { "aprende.com": "aprende-plus" },
+        hostOverrides: { "aprende.com": "rumbo-latino" },
       }),
-    ).toEqual({ brandId: "aprende-plus", source: "host-override" });
+    ).toEqual({ brandId: "rumbo-latino", source: "host-override" });
   });
 
   it("falls to the host when nothing explicit is set", () => {
-    expect(resolveBrand({ host: "cv.aprende.com", envDefault: "aprende-plus" })).toEqual({
+    expect(resolveBrand({ host: "cv.aprende.com", envDefault: "rumbo-latino" })).toEqual({
       brandId: "aprende",
       source: "host",
     });
@@ -139,18 +141,18 @@ describe("resolution precedence", () => {
   it("treats a present-but-unrecognised ?brand= as a reset, ignoring the cookie", () => {
     // `?brand=auto` must take effect on THIS response. Resolving via the stale
     // cookie here would make the reset look broken for one extra page view.
-    expect(resolveBrand({ host: "aprende.com", cookie: "aprende-plus", query: "auto" })).toEqual({
+    expect(resolveBrand({ host: "aprende.com", cookie: "rumbo-latino", query: "auto" })).toEqual({
       brandId: "aprende",
       source: "host",
     });
     // `?brand=` with an empty value resets the same way.
-    expect(resolveBrand({ host: "aprende.com", cookie: "aprende-plus", query: "" })).toEqual({
+    expect(resolveBrand({ host: "aprende.com", cookie: "rumbo-latino", query: "" })).toEqual({
       brandId: "aprende",
       source: "host",
     });
     // An absent parameter must still honour the cookie.
-    expect(resolveBrand({ host: "aprende.com", cookie: "aprende-plus", query: null })).toEqual({
-      brandId: "aprende-plus",
+    expect(resolveBrand({ host: "aprende.com", cookie: "rumbo-latino", query: null })).toEqual({
+      brandId: "rumbo-latino",
       source: "cookie",
     });
   });
@@ -207,7 +209,7 @@ describe("env validation", () => {
   it("rejects a DEFAULT_BRAND that is not a registered brand", async () => {
     const { getEnv } = await import("@/lib/env");
     configureValidEnv();
-    process.env.DEFAULT_BRAND = "aprende-pluss";
+    process.env.DEFAULT_BRAND = "rumbo-latinos";
     // Caught at startup rather than silently serving the fallback brand forever.
     expect(() => getEnv()).toThrow(/DEFAULT_BRAND must be one of/);
   });
@@ -226,10 +228,10 @@ describe("env validation", () => {
 
     resetEnvCache();
     process.env.DEFAULT_BRAND = "aprende";
-    process.env.BRAND_HOST_OVERRIDES = "cv.example.com=aprende-plus";
+    process.env.BRAND_HOST_OVERRIDES = "cv.example.com=rumbo-latino";
     expect(getEnv().DEFAULT_BRAND).toBe("aprende");
     expect(parseHostOverrides(getEnv().BRAND_HOST_OVERRIDES)).toEqual({
-      "cv.example.com": "aprende-plus",
+      "cv.example.com": "rumbo-latino",
     });
   });
 });

@@ -111,6 +111,8 @@ export type BrandLogo =
       mark: BrandImageAsset;
       /** Rendered mark size in the header, in px. */
       displayHeight: number;
+      /** Space between the mark and the wordmark, in px. */
+      markGap: number;
       /** The wordmark text, split so one trailing glyph can take the accent. */
       wordmark: { text: string; accentSuffix?: string };
     };
@@ -170,11 +172,14 @@ export interface BrandMetadata {
   title: string;
   description: string;
   /**
-   * Optional per-brand favicon/apple-icon. Leave unset to use the shared
-   * file-convention icons in `app/` — both current brands use the same flame
-   * mark, so neither overrides them. See `docs/branding.md` before setting these:
-   * a brand that overrides icons must also remove the `app/icon.*` convention
-   * file, or the browser receives two competing `<link rel="icon">` tags.
+   * Per-brand favicon and apple-touch icon, served from `public/brands/<id>/`.
+   *
+   * Both current brands set these, because their marks genuinely differ (Rumbo
+   * Latino's coral arrow vs Aprende Institute's flame). There is deliberately no
+   * `app/icon.*` convention file: the file convention emits its own
+   * `<link rel="icon">` that would compete with these per-brand ones, so the two
+   * mechanisms must not both be in play. Leave unset only for a brand that is
+   * content with no icon at all.
    */
   icon?: string;
   appleIcon?: string;

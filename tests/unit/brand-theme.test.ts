@@ -123,9 +123,9 @@ describe("brand config shape", () => {
 /**
  * Pairs that are knowingly below AA, pinned at the value they ship at today.
  *
- * Both are **inherited Aprende+ design-system values**, not choices this repo
- * made, and changing a live brand's palette is a design decision rather than a
- * refactor — so they are recorded here instead of quietly "fixed". Pinning them
+ * Both are **values taken verbatim from rumbolatino.com's stylesheet**, not
+ * choices this repo made, and changing a live brand's palette is a design
+ * decision rather than a refactor — so they are recorded here instead of quietly "fixed". Pinning them
  * means they cannot get worse, and any NEW brand still has to clear AA outright.
  *
  * Worth raising with design: darkening `textSecondary` from `#7C748C` to about
@@ -134,12 +134,13 @@ describe("brand config shape", () => {
  * contrast further; it needs a lighter hover or a different label colour.
  */
 const KNOWN_BELOW_AA: Record<string, number> = {
-  // #7C748C on cream / white / #F7EFEA — the design system's secondary grey.
-  "aprende-plus:textSecondary/surface": 4.24,
-  "aprende-plus:textSecondary/white": 4.43,
-  "aprende-plus:textSecondary/panel": 3.9,
-  // Ink on coral-dk. Hover-only, and the resting state (5.44:1) does clear AA.
-  "aprende-plus:accentOn/accentHover": 4.3,
+  // #7C748C on cream / white / #F7EFEA — the site's `--grey`.
+  "rumbo-latino:textSecondary/surface": 4.24,
+  "rumbo-latino:textSecondary/white": 4.43,
+  "rumbo-latino:textSecondary/panel": 3.9,
+  // White on coral and on coral-dk — the site's `.btn--primary { color:#fff }`.
+  "rumbo-latino:accentOn/accent": 2.73,
+  "rumbo-latino:accentOn/accentHover": 3.45,
 };
 
 /** Assert a pair clears AA, or clears its pinned floor if it is a known exception. */

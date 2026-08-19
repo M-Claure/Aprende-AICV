@@ -27,8 +27,9 @@ export function generateMetadata(): Metadata {
   return {
     title: brand.metadata.title,
     description: brand.metadata.description,
-    // Only set when a brand ships its own icons; otherwise the shared
-    // file-convention icons in `app/` apply (both brands use the same flame mark).
+    // Per-brand icons, from `public/brands/<id>/`. There is deliberately no
+    // `app/icon.*` convention file: it would emit a second, competing
+    // `<link rel="icon">` that ignores the active brand.
     ...(brand.metadata.icon
       ? {
           icons: {

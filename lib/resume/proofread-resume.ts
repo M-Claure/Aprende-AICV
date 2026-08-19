@@ -18,6 +18,7 @@ import type { AIProvider } from "@/lib/ai";
 import { Errors } from "@/lib/errors";
 import type { Store } from "@/lib/repositories/store";
 import { renderResumeHtml, type ResumeRenderModel } from "./resume-renderer";
+import type { ResumeArtifactWriter } from "./resume-artifacts";
 
 export interface ProofreadResult {
   resume: GeneratedResume;
@@ -31,6 +32,8 @@ export async function proofreadAndRerender(
   store: Store,
   ai: AIProvider,
   profileId: string,
+  /** See `generateResume` — same optional artifact seam, same reason. */
+  artifacts?: ResumeArtifactWriter,
 ): Promise<ProofreadResult> {
   const profile = await store.getResumeProfile(profileId);
   if (!profile) throw Errors.notFound("Perfil no encontrado");
@@ -101,7 +104,10 @@ export async function proofreadAndRerender(
     html,
   });
 
-  return { resume: saved, notes };
+  // Proofreading writes a new version, so the saved PDF has to follow it.
+  const stored = artifacts ? await artifacts.onResumeCreated(saved) : saved;
+
+  return { resume: stored, notes };
 }
 
 function buildRenderModel(

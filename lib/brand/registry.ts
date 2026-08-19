@@ -1,6 +1,6 @@
 import type { BrandConfig } from "@/lib/brand/types";
 import { aprendeBrand } from "@/lib/brand/brands/aprende";
-import { aprendePlusBrand } from "@/lib/brand/brands/aprende-plus";
+import { rumboLatinoBrand } from "@/lib/brand/brands/rumbo-latino";
 
 /**
  * The brand registry — the single place a brand is added.
@@ -21,7 +21,7 @@ import { aprendePlusBrand } from "@/lib/brand/brands/aprende-plus";
  * host resolution reads `hosts` off the config.
  */
 export const BRANDS = {
-  "aprende-plus": aprendePlusBrand,
+  "rumbo-latino": rumboLatinoBrand,
   aprende: aprendeBrand,
 } as const satisfies Record<string, BrandConfig>;
 
@@ -33,10 +33,10 @@ export const BRAND_IDS = Object.keys(BRANDS) as BrandId[];
 
 /**
  * The brand served when nothing else resolves (unknown host, no override, no
- * `DEFAULT_BRAND`). Aprende+ because that is what the app shipped as, so an
- * un-configured deploy looks exactly as it did before the brand system existed.
+ * `DEFAULT_BRAND`). Rumbo Latino because it is the consumer-facing brand this
+ * product ships under; Aprende Institute is the institutional skin.
  */
-export const FALLBACK_BRAND_ID: BrandId = "aprende-plus";
+export const FALLBACK_BRAND_ID: BrandId = "rumbo-latino";
 
 /** Type guard for untrusted input — a cookie value, a query param, an env var. */
 export function isBrandId(value: unknown): value is BrandId {

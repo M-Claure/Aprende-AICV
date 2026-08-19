@@ -27,6 +27,12 @@ export const ANALYTICS_EVENTS = [
   "resume_section_edited",
   "resume_proofread",
   "resume_finalized",
+  /**
+   * A PDF was rendered and written to storage, replacing the profile's previous
+   * one. Emitted on every generation, not only on download — the gap between
+   * this and `resume_generated` is the PDF save-failure rate.
+   */
+  "resume_pdf_stored",
   "pdf_export_started",
   "resume_downloaded",
   "funnel_abandoned",

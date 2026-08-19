@@ -11,11 +11,18 @@ export const runtime = "nodejs";
 
 /**
  * POST /api/resume-profiles/:id/export-pdf
- * Streams a PDF of the latest generated resume (generating one first if needed).
+ * Streams the PDF of the latest generated resume.
+ *
+ * Since every generation now saves a PDF (see `lib/resume/resume-artifacts.ts`),
+ * the common path is a storage read rather than a Chromium launch. Rendering is
+ * kept as the fallback for the two cases where nothing is stored: a résumé
+ * generated before this feature existed, or a save that failed (the writer is
+ * deliberately best-effort). That fallback also back-fills the stored file, so a
+ * profile self-heals after one download.
  */
 export async function POST(_request: Request, { params }: { params: { id: string } }) {
   return handleRoute(async () => {
-    const { userId, store, ai, analytics } = await getRequestContext();
+    const { userId, store, ai, analytics, resumeFiles, resumeArtifacts } = await getRequestContext();
     const profile = await loadOwnedProfile(store, params.id, userId);
 
     // Download is gated behind finalization: the user must explicitly finish the
@@ -28,11 +35,22 @@ export async function POST(_request: Request, { params }: { params: { id: string
 
     let resume = await store.getLatestGeneratedResume(params.id);
     if (!resume) {
-      resume = (await generateResume(store, ai, params.id)).resume;
+      resume = (await generateResume(store, ai, params.id, resumeArtifacts)).resume;
     }
     if (!resume.html) throw Errors.notReady("El currículum aún no tiene contenido para exportar.");
 
-    const pdf = await getPdfGenerator().generate(resume.html);
+    // Prefer the saved file. `getResumePdf` returns null for a missing object, so
+    // a stale `pdfPath` (file removed out of band) falls through to a re-render.
+    let pdf = resume.pdfPath
+      ? await resumeFiles.getResumePdf({ userId, profileId: params.id })
+      : null;
+
+    if (!pdf) {
+      pdf = await getPdfGenerator().generate(resume.html);
+      // Back-fill so the next download is a storage read. Best-effort: a failure
+      // here must not block a download we can already satisfy from memory.
+      await resumeArtifacts.onResumeCreated(resume);
+    }
 
     analytics.track("resume_downloaded", { resumeProfileId: params.id, version: resume.version }, userId);
 

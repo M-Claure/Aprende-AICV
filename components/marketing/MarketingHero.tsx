@@ -10,7 +10,7 @@ import type { BrandConfig, BrandHeroStep } from "@/lib/brand/types";
  * `brand.legal`, so a brand changes its whole pitch without touching this file.
  * Two layouts cover the visual difference between the current brands:
  *
- *   `centered`  — Aprende+: centred, a pill badge, emoji step cards. Warm and
+ *   `centered`  — Rumbo Latino: centred, a pill badge, emoji step cards. Warm and
  *                 conversational.
  *   `editorial` — Aprende Institute: left-aligned, serif headline, numbered
  *                 steps. Formal and institutional.
@@ -37,7 +37,7 @@ export function MarketingHero({ brand, agreed, onAgreedChange, onStart }: Market
   );
 }
 
-/** Aprende+ — centred, warm, emoji-led. */
+/** Rumbo Latino — centred, warm, emoji-led. */
 function CenteredHero({ brand, agreed, onAgreedChange, onStart }: MarketingHeroProps) {
   const { hero } = brand;
   return (

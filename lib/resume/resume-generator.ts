@@ -23,6 +23,7 @@ import { assembleProfileState } from "@/lib/profile-state";
 import { buildSkillGroups, traceBullets } from "./source-tracing";
 import { sortExperienceNewestFirst } from "./experience-order";
 import { withGenerationLock } from "./generation-lock";
+import type { ResumeArtifactWriter } from "./resume-artifacts";
 import { getResumeGuidelines } from "./guidelines";
 import { renderResumeHtml, type ResumeRenderModel } from "./resume-renderer";
 
@@ -35,16 +36,26 @@ export async function generateResume(
   store: Store,
   ai: AIProvider,
   profileId: string,
+  /**
+   * Optional side-effects for the new version — in production, rendering and
+   * saving the PDF (`createResumePdfWriter`). Optional so unit tests can generate
+   * without Chromium; every route passes `resumeArtifacts` from the request
+   * context, so the save happens on every real generation.
+   */
+  artifacts?: ResumeArtifactWriter,
 ): Promise<GeneratedResumeResult> {
   // A second concurrent request joins the first rather than paying for its own
   // generation and writing a competing version. See lib/resume/generation-lock.ts.
-  return withGenerationLock(profileId, () => runGeneration(store, ai, profileId));
+  // The PDF render runs inside the lock too, so two requests can never race to
+  // overwrite the profile's single stored file with different versions.
+  return withGenerationLock(profileId, () => runGeneration(store, ai, profileId, artifacts));
 }
 
 async function runGeneration(
   store: Store,
   ai: AIProvider,
   profileId: string,
+  artifacts?: ResumeArtifactWriter,
 ): Promise<GeneratedResumeResult> {
   const profile = await store.getResumeProfile(profileId);
   if (!profile) throw Errors.notFound("Perfil no encontrado");
@@ -235,7 +246,10 @@ async function runGeneration(
     html,
   });
 
-  return { resume, renderModel };
+  // Replaces whatever PDF the profile had. Never throws — see ResumeArtifactWriter.
+  const stored = artifacts ? await artifacts.onResumeCreated(resume) : resume;
+
+  return { resume: stored, renderModel };
 }
 
 function formatLanguageLevel(l: Language): string | null {

@@ -4,7 +4,7 @@ import type { BrandConfig } from "@/lib/brand/types";
 /**
  * **Aprende Institute** — the institutional parent brand.
  *
- * Where Aprende+ is warm and conversational, Aprende Institute is formal and
+ * Where Rumbo Latino is warm and conversational, Aprende Institute is formal and
  * academic: navy and crimson over cool neutrals, a serif wordmark, and copy that
  * reads as an institution addressing a student rather than an app addressing a
  * user. Substantially different enough to warrant its own header component
@@ -23,9 +23,9 @@ import type { BrandConfig } from "@/lib/brand/types";
  *    button label; white on `#E30840` is 4.80:1 and passes. The logo mark itself
  *    keeps its exact colour via `brandMark`, which is never a UI colour.
  * 2. `accentDark` is navy, NOT the crimson accent. Crimson as text is 3.76:1 on
- *    the surface; navy is 16.21:1. This mirrors the same call made for Aprende+.
+ *    the surface; navy is 16.21:1. This mirrors the same call made for Rumbo Latino.
  * 3. `accentOn` is therefore white (4.80:1 on `accent`) rather than ink — the
- *    opposite of Aprende+, because this accent is dark where coral is light.
+ *    opposite of Rumbo Latino, because this accent is dark where coral is light.
  */
 export const aprendeBrand: BrandConfig = {
   id: "aprende",
@@ -95,6 +95,8 @@ export const aprendeBrand: BrandConfig = {
     description:
       "Crea tu currículum profesional con ayuda de inteligencia artificial. " +
       "Una herramienta de Aprende Institute.",
+    icon: "/brands/aprende/icon.png",
+    appleIcon: "/brands/aprende/apple-icon.png",
   },
 
   hero: {

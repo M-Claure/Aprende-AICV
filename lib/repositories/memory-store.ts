@@ -3,7 +3,6 @@
  * whenever PERSISTENCE=memory (local dev + unit/e2e tests). Data lives for the
  * lifetime of the process only.
  */
-import { randomUUID } from "node:crypto";
 import type {
   Achievement,
   Certification,
@@ -20,6 +19,24 @@ import type {
   User,
 } from "@/types";
 import { Errors } from "@/lib/errors";
+import {
+  buildAchievement,
+  buildCertification,
+  buildConversationTurn,
+  buildEducation,
+  buildExperience,
+  buildGeneratedResume,
+  buildLanguage,
+  buildProfile,
+  buildProject,
+  buildSkill,
+  clone,
+  emptyPersonalInformation,
+  emptyQuestionState,
+  newId,
+  nowIso as now,
+  stripUndefined,
+} from "./funnel-entities";
 import type {
   CreateAchievementInput,
   CreateCertificationInput,
@@ -32,6 +49,8 @@ import type {
   CreateProjectInput,
   CreateSkillInput,
   PersonalInformationInput,
+  IterationAnswer,
+  IterationAnswerInput,
   QuestionStateInput,
   Store,
   UpdateAchievementInput,
@@ -43,9 +62,6 @@ import type {
   UpdateProjectInput,
   UpdateSkillInput,
 } from "./store";
-
-const now = () => new Date().toISOString();
-const clone = <T>(v: T): T => (v === undefined ? v : JSON.parse(JSON.stringify(v)));
 
 export class MemoryStore implements Store {
   private users = new Map<string, User>();
@@ -61,6 +77,8 @@ export class MemoryStore implements Store {
   private turns = new Map<string, ConversationTurn>();
   private questionStates = new Map<string, QuestionState>();
   private resumes = new Map<string, GeneratedResume>();
+  private iterations = new Map<string, number>();
+  private iterationAnswers = new Map<string, IterationAnswer>();
 
   /** Test helper: wipe all data. */
   reset(): void {
@@ -78,6 +96,8 @@ export class MemoryStore implements Store {
       this.turns,
       this.questionStates,
       this.resumes,
+      this.iterations,
+      this.iterationAnswers,
     ]) {
       (m as Map<string, unknown>).clear();
     }
@@ -109,22 +129,7 @@ export class MemoryStore implements Store {
 
   // ── Resume profiles ──
   async createResumeProfile(userId: string, input: CreateProfileInput): Promise<ResumeProfile> {
-    const profile: ResumeProfile = {
-      id: randomUUID(),
-      userId,
-      status: input.status ?? "draft",
-      targetRole: input.targetRole ?? null,
-      careerGoal: input.careerGoal ?? null,
-      location: input.location ?? null,
-      interests: input.interests ?? [],
-      progressPercentage: input.progressPercentage ?? 0,
-      currentSection: input.currentSection ?? "career_goal",
-      finalizedAt: input.finalizedAt ?? null,
-      termsAcceptedAt: input.termsAcceptedAt ?? null,
-      termsVersion: input.termsVersion ?? null,
-      createdAt: now(),
-      updatedAt: now(),
-    };
+    const profile = buildProfile(userId, input);
     this.profiles.set(profile.id, profile);
     return clone(profile);
   }
@@ -151,19 +156,7 @@ export class MemoryStore implements Store {
     patch: PersonalInformationInput,
   ): Promise<PersonalInformation> {
     const existing =
-      this.personal.get(profileId) ??
-      ({
-        resumeProfileId: profileId,
-        firstName: null,
-        lastName: null,
-        city: null,
-        state: null,
-        country: null,
-        phone: null,
-        email: null,
-        linkedInUrl: null,
-        portfolioUrl: null,
-      } satisfies PersonalInformation);
+      this.personal.get(profileId) ?? emptyPersonalInformation(profileId);
     const updated: PersonalInformation = { ...existing, ...stripUndefined(patch), resumeProfileId: profileId };
     this.personal.set(profileId, updated);
     return clone(updated);
@@ -171,22 +164,7 @@ export class MemoryStore implements Store {
 
   // ── Education ──
   async createEducation(profileId: string, input: CreateEducationInput): Promise<EducationEntry> {
-    const entry: EducationEntry = {
-      id: randomUUID(),
-      resumeProfileId: profileId,
-      institution: input.institution ?? null,
-      credential: input.credential ?? null,
-      fieldOfStudy: input.fieldOfStudy ?? null,
-      location: input.location ?? null,
-      startDate: input.startDate ?? null,
-      endDate: input.endDate ?? null,
-      isCurrent: input.isCurrent ?? false,
-      relevantCoursework: input.relevantCoursework ?? [],
-      projects: input.projects ?? [],
-      achievements: input.achievements ?? [],
-      source: input.source ?? "user_entered",
-      confirmationStatus: input.confirmationStatus ?? "confirmed",
-    };
+    const entry = buildEducation(profileId, input);
     this.education.set(entry.id, entry);
     return clone(entry);
   }
@@ -209,25 +187,7 @@ export class MemoryStore implements Store {
 
   // ── Experience ──
   async createExperience(profileId: string, input: CreateExperienceInput): Promise<ExperienceEntry> {
-    const entry: ExperienceEntry = {
-      id: randomUUID(),
-      resumeProfileId: profileId,
-      experienceType: input.experienceType,
-      title: input.title ?? null,
-      organization: input.organization ?? null,
-      location: input.location ?? null,
-      startDate: input.startDate ?? null,
-      endDate: input.endDate ?? null,
-      isCurrent: input.isCurrent ?? false,
-      rawDescription: input.rawDescription ?? null,
-      responsibilities: input.responsibilities ?? [],
-      accomplishments: input.accomplishments ?? [],
-      tools: input.tools ?? [],
-      peopleServed: input.peopleServed ?? null,
-      metrics: input.metrics ?? [],
-      source: input.source ?? "user_entered",
-      confirmationStatus: input.confirmationStatus ?? "confirmed",
-    };
+    const entry = buildExperience(profileId, input);
     this.experience.set(entry.id, entry);
     return clone(entry);
   }
@@ -252,19 +212,7 @@ export class MemoryStore implements Store {
   async createSkill(profileId: string, input: CreateSkillInput): Promise<Skill> {
     const dup = await this.findSkillByName(profileId, input.name);
     if (dup) throw Errors.conflict("La habilidad ya existe");
-    const skill: Skill = {
-      id: randomUUID(),
-      resumeProfileId: profileId,
-      name: input.name,
-      category: input.category ?? "general",
-      proficiency: input.proficiency ?? null,
-      origin: input.origin ?? "user_entered",
-      evidence: input.evidence ?? null,
-      sourceEntryId: input.sourceEntryId ?? null,
-      status: input.status ?? "suggested",
-      createdAt: now(),
-      updatedAt: now(),
-    };
+    const skill = buildSkill(profileId, input);
     this.skills.set(skill.id, skill);
     return clone(skill);
   }
@@ -296,17 +244,7 @@ export class MemoryStore implements Store {
     profileId: string,
     input: CreateCertificationInput,
   ): Promise<Certification> {
-    const cert: Certification = {
-      id: randomUUID(),
-      resumeProfileId: profileId,
-      name: input.name,
-      issuingOrganization: input.issuingOrganization ?? null,
-      issueDate: input.issueDate ?? null,
-      expirationDate: input.expirationDate ?? null,
-      credentialId: input.credentialId ?? null,
-      credentialUrl: input.credentialUrl ?? null,
-      confirmationStatus: input.confirmationStatus ?? "confirmed",
-    };
+    const cert = buildCertification(profileId, input);
     this.certifications.set(cert.id, cert);
     return clone(cert);
   }
@@ -329,15 +267,7 @@ export class MemoryStore implements Store {
 
   // ── Languages ──
   async createLanguage(profileId: string, input: CreateLanguageInput): Promise<Language> {
-    const lang: Language = {
-      id: randomUUID(),
-      resumeProfileId: profileId,
-      name: input.name,
-      speakingLevel: input.speakingLevel ?? null,
-      readingLevel: input.readingLevel ?? null,
-      writingLevel: input.writingLevel ?? null,
-      includeOnResume: input.includeOnResume ?? true,
-    };
+    const lang = buildLanguage(profileId, input);
     this.languages.set(lang.id, lang);
     return clone(lang);
   }
@@ -360,20 +290,7 @@ export class MemoryStore implements Store {
 
   // ── Projects ──
   async createProject(profileId: string, input: CreateProjectInput): Promise<Project> {
-    const project: Project = {
-      id: randomUUID(),
-      resumeProfileId: profileId,
-      name: input.name,
-      projectType: input.projectType ?? null,
-      organization: input.organization ?? null,
-      startDate: input.startDate ?? null,
-      endDate: input.endDate ?? null,
-      description: input.description ?? null,
-      responsibilities: input.responsibilities ?? [],
-      outcomes: input.outcomes ?? [],
-      tools: input.tools ?? [],
-      confirmationStatus: input.confirmationStatus ?? "confirmed",
-    };
+    const project = buildProject(profileId, input);
     this.projects.set(project.id, project);
     return clone(project);
   }
@@ -396,15 +313,7 @@ export class MemoryStore implements Store {
 
   // ── Achievements ──
   async createAchievement(profileId: string, input: CreateAchievementInput): Promise<Achievement> {
-    const achievement: Achievement = {
-      id: randomUUID(),
-      resumeProfileId: profileId,
-      title: input.title,
-      organization: input.organization ?? null,
-      date: input.date ?? null,
-      description: input.description ?? null,
-      confirmationStatus: input.confirmationStatus ?? "confirmed",
-    };
+    const achievement = buildAchievement(profileId, input);
     this.achievements.set(achievement.id, achievement);
     return clone(achievement);
   }
@@ -430,19 +339,7 @@ export class MemoryStore implements Store {
     profileId: string,
     input: CreateConversationTurnInput,
   ): Promise<ConversationTurn> {
-    const turn: ConversationTurn = {
-      id: randomUUID(),
-      resumeProfileId: profileId,
-      questionId: input.questionId,
-      section: input.section,
-      assistantMessage: input.assistantMessage,
-      userAnswer: input.userAnswer ?? null,
-      normalizedAnswer: input.normalizedAnswer ?? null,
-      skipped: input.skipped ?? false,
-      timeSpentMs: input.timeSpentMs ?? null,
-      attemptNumber: input.attemptNumber ?? 1,
-      createdAt: now(),
-    };
+    const turn = buildConversationTurn(profileId, input);
     this.turns.set(turn.id, turn);
     return clone(turn);
   }
@@ -459,17 +356,7 @@ export class MemoryStore implements Store {
   async upsertQuestionState(profileId: string, patch: QuestionStateInput): Promise<QuestionState> {
     const existing =
       this.questionStates.get(profileId) ??
-      ({
-        resumeProfileId: profileId,
-        askedQuestionIds: [],
-        skippedQuestionIds: [],
-        completedSections: [],
-        activeSection: null,
-        lastQuestionId: null,
-        lastShownQuestionId: null,
-        lastShownAt: null,
-        lastUpdatedAt: now(),
-      } satisfies QuestionState);
+      emptyQuestionState(profileId);
     const updated: QuestionState = {
       ...existing,
       ...stripUndefined(patch),
@@ -487,21 +374,7 @@ export class MemoryStore implements Store {
   ): Promise<GeneratedResume> {
     const existing = this.byProfile(this.resumes, profileId);
     const version = existing.reduce((max, r) => Math.max(max, r.version), 0) + 1;
-    const resume: GeneratedResume = {
-      id: randomUUID(),
-      resumeProfileId: profileId,
-      version: input.version ?? version,
-      professionalSummary: input.professionalSummary ?? "",
-      skills: input.skills ?? [],
-      experience: input.experience ?? [],
-      education: input.education ?? [],
-      certifications: input.certifications ?? [],
-      projects: input.projects ?? [],
-      languages: input.languages ?? [],
-      html: input.html ?? "",
-      pdfUrl: input.pdfUrl ?? null,
-      createdAt: now(),
-    };
+    const resume = buildGeneratedResume(profileId, input, version);
     this.resumes.set(resume.id, resume);
     return clone(resume);
   }
@@ -514,7 +387,7 @@ export class MemoryStore implements Store {
   }
   async updateGeneratedResume(
     id: string,
-    patch: Partial<Pick<GeneratedResume, "pdfUrl" | "html">>,
+    patch: Partial<Pick<GeneratedResume, "pdfPath" | "html">>,
   ): Promise<GeneratedResume> {
     const existing = this.resumes.get(id);
     if (!existing) throw Errors.notFound("Currículum generado no encontrado");
@@ -522,13 +395,38 @@ export class MemoryStore implements Store {
     this.resumes.set(id, updated);
     return clone(updated);
   }
+
+  // ── Improvement iterations ──
+  async getIteration(profileId: string): Promise<number> {
+    return this.iterations.get(profileId) ?? 0;
+  }
+  async advanceIteration(profileId: string, max: number): Promise<number> {
+    const next = Math.min(max, (this.iterations.get(profileId) ?? 0) + 1);
+    this.iterations.set(profileId, next);
+    return next;
+  }
+  async recordIterationAnswer(
+    profileId: string,
+    iteration: number,
+    input: IterationAnswerInput,
+  ): Promise<IterationAnswer> {
+    const entry: IterationAnswer = {
+      id: newId(),
+      resumeProfileId: profileId,
+      iteration,
+      questionId: input.questionId,
+      question: input.question,
+      answer: input.answer ?? null,
+      createdAt: now(),
+    };
+    this.iterationAnswers.set(entry.id, entry);
+    return clone(entry);
+  }
+  async listIterationAnswers(profileId: string, iteration: number): Promise<IterationAnswer[]> {
+    return [...this.iterationAnswers.values()]
+      .filter((a) => a.resumeProfileId === profileId && a.iteration === iteration)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .map(clone);
+  }
 }
 
-/** Drop keys whose value is `undefined` so a patch never nulls existing fields. */
-function stripUndefined<T extends object>(obj: T): Partial<T> {
-  const out: Partial<T> = {};
-  for (const [k, v] of Object.entries(obj)) {
-    if (v !== undefined) (out as Record<string, unknown>)[k] = v;
-  }
-  return out;
-}

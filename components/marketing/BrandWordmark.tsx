@@ -12,10 +12,10 @@ import type { BrandConfig } from "@/lib/brand/types";
  * lockup is the asset and re-typesetting it would be off-brand.
  *
  * `mark-and-wordmark` — the mark as an image, the wordmark as **live text**. This
- * is how the Aprende+ design system itself assembles it, and it is better than a
- * flat image: the wordmark stays crisp at any zoom, inherits the theme, and stays
- * selectable and translatable. The optional `accentSuffix` is the one glyph that
- * takes the accent colour (the "+" in "Aprende+").
+ * is how rumbolatino.com itself assembles its isologo, and it beats a flat image:
+ * the wordmark stays crisp at any zoom, inherits the theme, and stays selectable
+ * and translatable. `accentSuffix` is the trailing run that takes the accent
+ * colour — " Latino" in "Rumbo Latino".
  *
  * Brand rules honoured here: the mark is never recoloured — it keeps its own
  * colour inside the asset — and the wordmark uses the dark brand anchor
@@ -48,7 +48,8 @@ export function BrandWordmark({ brand, className = "" }: { brand: BrandConfig; c
   return (
     <Link
       href="/"
-      className={`flex shrink-0 items-center gap-[3px] font-heading font-extrabold leading-none text-brand-strong ${className}`}
+      className={`flex shrink-0 items-center font-heading font-extrabold leading-none text-brand-strong ${className}`}
+      style={{ gap: logo.markGap }}
       aria-label={`${brand.name} — inicio`}
     >
       <Image

@@ -167,6 +167,44 @@ export interface Store {
   getLatestGeneratedResume(profileId: string): Promise<GeneratedResume | null>;
   updateGeneratedResume(
     id: string,
-    patch: Partial<Pick<GeneratedResume, "pdfUrl" | "html">>,
+    patch: Partial<Pick<GeneratedResume, "pdfPath" | "html">>,
   ): Promise<GeneratedResume>;
+
+  // Improvement iterations
+  /** Rounds of improvement completed so far, 0..MAX_RESUME_ITERATIONS. */
+  getIteration(profileId: string): Promise<number>;
+  /** Bump the counter, clamped to `max`. Returns the new value. */
+  advanceIteration(profileId: string, max: number): Promise<number>;
+  /** Log a question/answer from the round currently being filled in. */
+  recordIterationAnswer(
+    profileId: string,
+    iteration: number,
+    input: IterationAnswerInput,
+  ): Promise<IterationAnswer>;
+  listIterationAnswers(profileId: string, iteration: number): Promise<IterationAnswer[]>;
 }
+
+/**
+ * One improvement-round question and the answer it got.
+ *
+ * A log, not a source of truth: the answer is also applied to the profile through
+ * the normal pipeline (enrich-entry / answers / interests), so these rows record
+ * what was asked and said, and deleting one loses the record rather than any
+ * résumé content. Persisted one table per round — `iteration_1..3`.
+ */
+export interface IterationAnswer {
+  id: string;
+  resumeProfileId: string;
+  /** 1-based round number. */
+  iteration: number;
+  questionId: string;
+  question: string;
+  answer: string | null;
+  createdAt: string;
+}
+
+export type IterationAnswerInput = {
+  questionId: string;
+  question: string;
+  answer?: string | null;
+};

@@ -2,23 +2,32 @@
 
 Two independent sources answer these questions:
 
-- **Postgres** — one row per turn in `conversation_turns`, plus the current exit
-  point in `question_states`. Authoritative, complete, and reliable at the small
-  cohort sizes this product runs at. Start here.
+- **Postgres** — the `funnel` table. Each row carries its whole Q&A history in
+  `conversation` (a JSONB array of turns) and its current exit point in
+  `question_state`. Authoritative, complete, and reliable at the small cohort
+  sizes this product runs at. Start here.
 - **Amplitude** — the event stream (`lib/analytics/events.ts`). Better for
   time-series, retention curves, and segmenting by device.
 
-> **Do not wrap these queries in database views.** `conversation_turns` and
-> `question_states` are RLS-protected per user; a view owned by `postgres` would
-> bypass RLS for any role that can select it. Run these ad hoc in the Supabase SQL
-> editor (or from a service-role job), which is already outside RLS.
+> **Do not wrap these queries in database views.** `funnel` is RLS-protected per
+> user; a view owned by `postgres` would bypass RLS for any role that can select
+> it. Run these ad hoc in the Supabase SQL editor (or from a service-role job),
+> which is already outside RLS.
+
+> **Turns are JSONB, not rows.** Since the schema was simplified
+> (`0007_simplified_schema.sql`) a turn is an element of `funnel.conversation`, so
+> every query below expands it with `jsonb_array_elements` and reads camelCase
+> keys — `turn->>'questionId'`, not a `question_id` column. The `turns` CTE that
+> most queries open with reproduces the old per-row shape, so the analysis below
+> it reads the same as it always did.
 
 ## The two timestamps that matter
 
-| Column | Meaning |
+| Field | Meaning |
 | --- | --- |
-| `question_states.last_question_id` | The last question the user **responded to** |
-| `question_states.last_shown_question_id` | The last question the user **was served** |
+| `funnel.question_state->>'lastQuestionId'` | The last question the user **responded to** |
+| `funnel.question_state->>'lastShownQuestionId'` | The last question the user **was served** |
+| `funnel.question_state->>'lastShownAt'` | When that question was served (ISO text — cast it) |
 
 When a profile stalls, the second one is the exit point — the screen they were
 looking at when they gave up. The first one only tells you the last screen they
@@ -30,12 +39,11 @@ Exit points, ranked. A profile counts as stalled when it was served a question,
 never finished, and has been idle for a day.
 
 ```sql
-select qs.last_shown_question_id as question_id,
-       count(*)                  as stalled_profiles
-from question_states qs
-join resume_profiles p on p.id = qs.resume_profile_id
-where p.finalized_at is null
-  and qs.last_shown_at < now() - interval '24 hours'
+select question_state->>'lastShownQuestionId' as question_id,
+       count(*)                               as stalled_profiles
+from funnel
+where finalized_at is null
+  and (question_state->>'lastShownAt')::timestamptz < now() - interval '24 hours'
 group by 1
 order by stalled_profiles desc;
 ```
@@ -47,16 +55,15 @@ normalizes: of everyone who reached a question, what share never got past it?
 
 ```sql
 with answered as (
-  select question_id, count(distinct resume_profile_id) as answered_profiles
-  from conversation_turns
+  select t.turn->>'questionId' as question_id, count(distinct f.id) as answered_profiles
+  from funnel f, lateral jsonb_array_elements(f.conversation) as t(turn)
   group by 1
 ),
 stalled as (
-  select qs.last_shown_question_id as question_id, count(*) as stalled_profiles
-  from question_states qs
-  join resume_profiles p on p.id = qs.resume_profile_id
-  where p.finalized_at is null
-    and qs.last_shown_at < now() - interval '24 hours'
+  select question_state->>'lastShownQuestionId' as question_id, count(*) as stalled_profiles
+  from funnel
+  where finalized_at is null
+    and (question_state->>'lastShownAt')::timestamptz < now() - interval '24 hours'
   group by 1
 )
 select coalesce(a.question_id, s.question_id)   as question_id,
@@ -76,6 +83,15 @@ Four struggle signals in one ranking. Read them together — a question can be s
 because it's hard *or* because it's genuinely open-ended.
 
 ```sql
+with turns as (
+  select f.id                                    as resume_profile_id,
+         t.turn->>'questionId'                   as question_id,
+         (t.turn->>'attemptNumber')::int         as attempt_number,
+         (t.turn->>'skipped')::bool              as skipped,
+         (t.turn->>'timeSpentMs')::int           as time_spent_ms,
+         t.turn->'normalizedAnswer'              as normalized_answer
+  from funnel f, lateral jsonb_array_elements(f.conversation) as t(turn)
+)
 select question_id,
        count(distinct resume_profile_id)                          as users,
        round(avg(attempt_number), 2)                              as avg_attempts,
@@ -83,7 +99,7 @@ select question_id,
        round(avg((skipped)::int), 3)                              as skip_rate,
        percentile_cont(0.5) within group (order by time_spent_ms) as median_ms,
        percentile_cont(0.9) within group (order by time_spent_ms) as p90_ms
-from conversation_turns
+from turns
 group by 1
 having count(distinct resume_profile_id) >= 5   -- suppress tiny samples
 order by median_ms desc nulls last;
@@ -104,12 +120,17 @@ order by median_ms desc nulls last;
 this." Clusters here mean the question invites answers the normalizer can't parse.
 
 ```sql
+with turns as (
+  select t.turn->>'questionId'      as question_id,
+         t.turn->'normalizedAnswer' as normalized_answer
+  from funnel f, lateral jsonb_array_elements(f.conversation) as t(turn)
+)
 select question_id,
        count(*) filter (where (normalized_answer->>'needsConfirmation')::bool) as unclear,
        count(*)                                                                as total,
        round(avg(((normalized_answer->>'needsConfirmation')::bool)::int), 3)   as unclear_rate
-from conversation_turns
-where normalized_answer is not null
+from turns
+where normalized_answer is not null and normalized_answer <> 'null'::jsonb
 group by 1
 having count(*) >= 5
 order by unclear_rate desc;
@@ -118,14 +139,34 @@ order by unclear_rate desc;
 ## 5. How far do abandoned profiles get?
 
 ```sql
-select width_bucket(p.progress_percentage, 0, 100, 10) * 10 as progress_bucket,
-       count(*)                                             as profiles
-from resume_profiles p
-join question_states qs on qs.resume_profile_id = p.id
-where p.finalized_at is null
-  and qs.last_shown_at < now() - interval '24 hours'
+select width_bucket(progress_percentage, 0, 100, 10) * 10 as progress_bucket,
+       count(*)                                           as profiles
+from funnel
+where finalized_at is null
+  and (question_state->>'lastShownAt')::timestamptz < now() - interval '24 hours'
 group by 1
 order by 1;
+```
+
+## 6. How much does the improvement loop get used?
+
+New with the simplified schema: the round counter is server state, and each round's
+questions and answers are logged in their own table.
+
+```sql
+select iteration, count(*) as profiles
+from funnel
+group by 1
+order by 1;
+
+-- What gets asked, and how often it actually gets answered, per round.
+select 1 as round, question_id, count(*) as asked,
+       count(answer) as answered from iteration_1 group by 1,2
+union all
+select 2, question_id, count(*), count(answer) from iteration_2 group by 1,2
+union all
+select 3, question_id, count(*), count(answer) from iteration_3 group by 1,2
+order by round, asked desc;
 ```
 
 ## Amplitude side
@@ -138,7 +179,7 @@ The event stream mirrors the same model:
 - `adaptive_question_skipped` carries `questionId`, `timeSpentMs`,
   `attemptNumber`, and `deviceCategory`.
 - `deviceCategory` (`mobile` / `tablet` / `desktop`) is currently **event-only** —
-  it is not persisted to `conversation_turns`, so device segmentation has to
+  it is not persisted to `funnel.conversation`, so device segmentation has to
   happen in Amplitude. Adding a column would make query 3 splittable by device.
 
 ## Known gaps

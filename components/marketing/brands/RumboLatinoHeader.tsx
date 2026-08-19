@@ -2,13 +2,17 @@ import { BrandWordmark } from "@/components/marketing/BrandWordmark";
 import type { BrandConfig } from "@/lib/brand/types";
 
 /**
- * **Aprende+** brand bar: a coral rule across the top, then a white bar carrying
+ * **Rumbo Latino** brand bar: a coral rule across the top, then a bar carrying
  * the isologo, a divider, and the product name in Poppins caps.
  *
- * Height must stay in sync with `headerHeight` in the Aprende+ config
+ * The coral rule is this product's own header treatment (rumbolatino.com's nav is
+ * a sticky translucent cream bar with a hairline). It is kept because it reads as
+ * the app chrome that carries "MI CV CON IA", and it uses the brand's own accent.
+ *
+ * Height must stay in sync with `headerHeight` in the Rumbo Latino config
  * (4px rule + 64px bar = 68px = 4.25rem) — `.min-h-page` subtracts it.
  */
-export function AprendePlusHeader({ brand }: { brand: BrandConfig }) {
+export function RumboLatinoHeader({ brand }: { brand: BrandConfig }) {
   return (
     <header className="border-b border-border bg-white">
       <div className="h-1 w-full bg-accent" aria-hidden />

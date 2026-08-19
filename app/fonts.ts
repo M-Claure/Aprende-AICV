@@ -18,7 +18,7 @@ import type { BrandId } from "@/lib/brand/registry";
  * missing entry a compile error rather than an unstyled page.
  */
 
-/** Aprende+ body copy. */
+/** Rumbo Latino body copy. */
 const inter = Inter({
   subsets: ["latin"],
   weight: ["400", "600", "700"],
@@ -26,7 +26,7 @@ const inter = Inter({
   display: "swap",
 });
 
-/** Aprende+ display type. 800 for Display/H1/H2, 700 for H3. */
+/** Rumbo Latino display type. 800 for Display/H1/H2, 700 for H3. */
 const poppins = Poppins({
   subsets: ["latin"],
   weight: ["700", "800"],
@@ -50,6 +50,6 @@ const sourceSerif = Source_Serif_4({
 
 /** The `<html>` className that binds a brand's font variables. */
 export const BRAND_FONT_CLASS: Record<BrandId, string> = {
-  "aprende-plus": `${inter.variable} ${poppins.variable}`,
+  "rumbo-latino": `${inter.variable} ${poppins.variable}`,
   aprende: `${sourceSans.variable} ${sourceSerif.variable}`,
 };

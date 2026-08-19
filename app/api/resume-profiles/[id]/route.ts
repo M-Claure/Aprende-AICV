@@ -12,11 +12,14 @@ export async function GET(_request: Request, { params }: Params) {
   return handleRoute(async () => {
     const { userId, store } = await getRequestContext();
     const profile = await loadOwnedProfile(store, params.id, userId);
-    const [personalInformation, state] = await Promise.all([
+    const [personalInformation, state, iteration] = await Promise.all([
       store.getPersonalInformation(params.id),
       assembleProfileState(store, params.id),
+      // Improvement rounds completed. Kept off `ResumeProfile` itself so it can
+      // only be changed through the clamped `advanceIteration`, never a PATCH.
+      store.getIteration(params.id),
     ]);
-    return ok({ profile, personalInformation, state });
+    return ok({ profile, personalInformation, state, iteration });
   });
 }
 

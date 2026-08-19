@@ -3,7 +3,7 @@ import type { BrandConfig } from "@/lib/brand/types";
 
 /**
  * **Aprende Institute** brand bar — deliberately more restrained than the
- * Aprende+ one: no coloured rule, a single hairline, and the product name set as
+ * Rumbo Latino one: no coloured rule, a single hairline, and the product name set as
  * letterspaced small caps to echo the "INSTITUTE" lettering in the lockup.
  *
  * This is the case the per-brand override exists for. The two headers share the

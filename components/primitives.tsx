@@ -27,8 +27,9 @@ export function Button({
   const base =
     "inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed";
   const styles = {
-    // `accent-on` rather than a hard-coded white or ink: the readable label
-    // colour for an accent fill differs per brand (see lib/brand/brands/*.ts).
+    // `accent-on` rather than a hard-coded colour: the label colour for an accent
+    // fill is a per-brand decision (see lib/brand/brands/*.ts), even where the
+    // current brands happen to agree on white.
     primary: "bg-accent text-accent-on hover:bg-accent-hover",
     secondary: "bg-white text-text-primary border border-border hover:bg-gray-50",
     text: "text-accent-dark hover:underline px-3",

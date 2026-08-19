@@ -239,3 +239,13 @@ export const RegenerateSectionBody = z.object({
 });
 
 export type AnswerBodyInput = z.infer<typeof AnswerBody>;
+
+/**
+ * One improvement-round question/answer. `question` is the text the user was
+ * shown, which only the client has — the analyzer's output is not persisted.
+ */
+export const RecordIterationAnswerBody = z.object({
+  questionId: z.string().min(1).max(120),
+  question: z.string().min(1).max(2000),
+  answer: z.string().max(8000).nullish(),
+});

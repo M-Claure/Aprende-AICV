@@ -1,6 +1,6 @@
 # Multi-brand system
 
-One repo, one build, one product — two marketing skins. **Aprende+** (warm,
+One repo, one build, one product — two marketing skins. **Rumbo Latino** (warm,
 learner-facing) and **Aprende Institute** (formal, institutional) are served from
 the same deployment, chosen per request.
 
@@ -13,7 +13,7 @@ product logic.
 
 | Branded | Shared |
 | --- | --- |
-| Palette, typography, header, favicon-capable metadata | Every funnel screen and component |
+| Palette, typography, header, favicon and metadata | Every funnel screen and component |
 | Landing hero: headline, lede, steps, CTA, layout | Question catalog, completeness engine, prioritizer |
 | Contact-step and sign-in copy | AI providers, prompts, Zod schemas |
 | Logo assets, consent link | `Store` / Supabase, RLS, analytics |
@@ -41,8 +41,8 @@ Precedence — first match wins (`lib/brand/resolve.ts`):
    domain, without a code change.
 4. **Host match** against each config's `hosts` (`*.example.com` wildcards allowed).
 5. **`DEFAULT_BRAND`** — for preview deploys and `localhost`.
-6. **`FALLBACK_BRAND_ID`** — `aprende-plus`, so an unconfigured deploy looks exactly
-   as the app did before the brand system existed.
+6. **`FALLBACK_BRAND_ID`** — `rumbo-latino`, the consumer-facing brand this product
+   ships under.
 
 `?brand=auto` (or any unrecognised value) clears the override and returns to
 host-based resolution, taking effect on that same response.
@@ -85,12 +85,27 @@ Two consequences show up in every brand config:
 
 - **`accentDark` is not the accent.** A saturated brand accent almost never clears
   4.5:1 as 14px text on a light surface, so interactive text uses the dark brand
-  anchor (plum for Aprende+, navy for Aprende).
-- **`accentOn` differs per brand.** Ink on Aprende+'s light coral (5.44:1); white on
-  Aprende's darker crimson (4.80:1).
+  anchor (plum for Rumbo Latino, navy for Aprende).
+- **`accentOn` is a per-brand decision.** White on Aprende's darker crimson clears
+  AA at 4.80:1. White on Rumbo Latino's lighter coral does not — 2.73:1 — but it is
+  what rumbolatino.com ships, and brand fidelity was chosen over contrast here as
+  an explicit owner decision.
 
-Two inherited Aprende+ values sit just below AA and are pinned as documented
-exceptions in that test rather than silently changed — see `KNOWN_BELOW_AA`.
+### Known exceptions
+
+Four pairs sit below AA, all taken verbatim from rumbolatino.com and all pinned in
+`KNOWN_BELOW_AA` so they cannot widen and stay visible in review:
+
+| Pair | Ratio | Note |
+| --- | --- | --- |
+| `accentOn` on `accent` | 2.73:1 | white on coral — the primary CTA label |
+| `accentOn` on `accentHover` | 3.46:1 | same, hover state |
+| `textSecondary` on `surface` / `white` / `panel` | 4.25 / 4.44 / 3.91:1 | the site's `--grey` |
+
+Reverting either group is a one-line change: `accentOn: "#2A2340"` scores 5.44:1 and
+4.30:1; `textSecondary: "#736A84"` clears AA on all three surfaces with no
+perceptible hue shift. A **new** brand still has to clear AA outright — the
+exception list is keyed per brand and per pair, so it grants nothing by default.
 
 ## Reuse vs. per-brand components
 
@@ -101,9 +116,9 @@ consent block and the CTA.
 
 Register a dedicated component in `components/marketing/registry.tsx` only when the
 designs diverge structurally enough that one component would need a flag per visual
-decision. The headers are the honest example — Aprende+ leads with a coral rule and
-a Poppins isologo, Aprende Institute with a hairline and a serif lockup — and even
-they share the isologo renderer (`BrandWordmark`).
+decision. The headers are the honest example — Rumbo Latino leads with a coral rule
+and a Poppins isologo, Aprende Institute with a hairline and a serif lockup — and
+even they share the isologo renderer (`BrandWordmark`).
 
 A registered component must be **presentational**: it takes `brand` as a prop and
 calls no server API. The registry is reached from both a Server Component (the
@@ -132,7 +147,7 @@ components/marketing/
   brands/*Header.tsx  per-brand headers
 
 app/fonts.ts          BrandId → next/font variables
-public/brands/<id>/   per-brand assets
+public/brands/<id>/   per-brand assets, including icon.png / apple-icon.png
 ```
 
 The dependency arrow points one way: components import configs, configs import
@@ -147,7 +162,8 @@ config at all.
    automatically, which turns every `Record<BrandId, …>` into a compile error until
    it handles the new brand.
 3. Add its fonts to `app/fonts.ts` (a compile error until you do).
-4. Drop assets in `public/brands/<id>/`.
+4. Drop assets in `public/brands/<id>/`, including `icon.png` and `apple-icon.png`
+   (there is no `app/icon.*` convention file — it would compete with these).
 5. Optionally register a header/hero in `components/marketing/registry.tsx`.
 6. Point a domain at it: add `hosts` to the config, or set `BRAND_HOST_OVERRIDES`.
 
@@ -160,7 +176,7 @@ asset namespacing, copy completeness and font wiring without writing a test.
 ```bash
 npm run dev
 open 'http://localhost:3000/?brand=aprende'       # switch, sticky for the session
-open 'http://localhost:3000/?brand=aprende-plus'
+open 'http://localhost:3000/?brand=rumbo-latino'
 open 'http://localhost:3000/?brand=auto'          # back to host-based
 ```
 

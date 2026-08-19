@@ -13,11 +13,11 @@ export const dynamic = "force-dynamic";
  */
 export async function POST(request: Request, { params }: { params: { id: string } }) {
   return handleRoute(async () => {
-    const { userId, store, ai, analytics } = await getRequestContext();
+    const { userId, store, ai, analytics, resumeArtifacts } = await getRequestContext();
     await loadOwnedProfile(store, params.id, userId);
     const { section } = RegenerateSectionBody.parse(await readJson(request));
 
-    const { resume } = await generateResume(store, ai, params.id);
+    const { resume } = await generateResume(store, ai, params.id, resumeArtifacts);
     analytics.track(
       "resume_section_edited",
       { resumeProfileId: params.id, section, version: resume.version },

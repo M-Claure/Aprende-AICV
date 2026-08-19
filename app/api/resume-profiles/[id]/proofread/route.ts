@@ -12,10 +12,10 @@ export const dynamic = "force-dynamic";
  */
 export async function POST(_request: Request, { params }: { params: { id: string } }) {
   return handleRoute(async () => {
-    const { userId, store, ai, analytics } = await getRequestContext();
+    const { userId, store, ai, analytics, resumeArtifacts } = await getRequestContext();
     await loadOwnedProfile(store, params.id, userId);
 
-    const { resume, notes } = await proofreadAndRerender(store, ai, params.id);
+    const { resume, notes } = await proofreadAndRerender(store, ai, params.id, resumeArtifacts);
 
     analytics.track("resume_proofread", { resumeProfileId: params.id, version: resume.version }, userId);
     return ok({ resume, notes });

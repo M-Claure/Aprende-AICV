@@ -1,5 +1,5 @@
 import { AprendeHeader } from "@/components/marketing/brands/AprendeHeader";
-import { AprendePlusHeader } from "@/components/marketing/brands/AprendePlusHeader";
+import { RumboLatinoHeader } from "@/components/marketing/brands/RumboLatinoHeader";
 import { MarketingHero, type MarketingHeroProps } from "@/components/marketing/MarketingHero";
 import type { BrandId } from "@/lib/brand/registry";
 import type { BrandConfig } from "@/lib/brand/types";
@@ -17,9 +17,9 @@ import type { BrandConfig } from "@/lib/brand/types";
  * most brand differences — that is how `MarketingHero` serves both brands today.
  * Register a dedicated component only when the designs diverge structurally
  * enough that expressing both in one component would mean a flag per visual
- * decision. The headers are the honest example: Aprende+ leads with a coral rule
- * and a Poppins isologo, Aprende Institute with a hairline and a serif lockup, and
- * they share only the isologo renderer.
+ * decision. The headers are the honest example: Rumbo Latino leads with a coral
+ * rule and a Poppins isologo, Aprende Institute with a hairline and a serif
+ * lockup, and they share only the isologo renderer.
  *
  * ## The one constraint on a registered component
  * It must be **presentational**: it takes `brand` as a prop and calls no
@@ -40,6 +40,6 @@ export interface BrandMarketingComponents {
  * Point `Hero` at the shared `MarketingHero` unless the brand truly needs its own.
  */
 export const BRAND_MARKETING: Record<BrandId, BrandMarketingComponents> = {
-  "aprende-plus": { Header: AprendePlusHeader, Hero: MarketingHero },
+  "rumbo-latino": { Header: RumboLatinoHeader, Hero: MarketingHero },
   aprende: { Header: AprendeHeader, Hero: MarketingHero },
 };

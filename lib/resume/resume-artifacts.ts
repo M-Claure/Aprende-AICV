@@ -1,0 +1,83 @@
+import type { GeneratedResume } from "@/types";
+import type { Analytics } from "@/lib/analytics";
+import type { PdfGenerator } from "@/lib/resume/pdf-generator";
+import type { ResumeFileStore, ResumeRowUpdater } from "@/lib/storage/resume-file-store";
+
+/**
+ * Side-effects that run when a new résumé version is persisted.
+ *
+ * `generateResume` and `proofreadResume` are the only two places that create a
+ * `generated_resumes` row, and both call this — so "every generation replaces the
+ * saved PDF" is enforced at the row-creation seam rather than remembered at each
+ * of the four routes that can trigger one.
+ *
+ * It is an injected interface (not a direct import) so the résumé generator never
+ * pulls in Chromium or Supabase Storage, and so the whole path is unit-testable
+ * with a memory file store.
+ */
+export interface ResumeArtifactWriter {
+  /**
+   * Render and store the artifacts for a freshly created résumé.
+   *
+   * Returns the résumé as it now stands — with `pdfPath` populated on success, or
+   * unchanged on failure. **Never throws:** a PDF is a derived convenience, and
+   * losing a finished résumé because Chromium hiccuped would be a far worse
+   * outcome than a missing cached file that the download path re-renders anyway.
+   */
+  onResumeCreated(resume: GeneratedResume): Promise<GeneratedResume>;
+}
+
+export interface ResumePdfWriterDeps {
+  userId: string;
+  store: ResumeRowUpdater;
+  pdf: PdfGenerator;
+  files: ResumeFileStore;
+  analytics?: Analytics;
+}
+
+/**
+ * The production writer: render the résumé HTML to PDF, overwrite the profile's
+ * stored file, and record the object path on the row.
+ *
+ * Deliberately synchronous with the generation request rather than fired and
+ * forgotten. Work started after a response is returned is not guaranteed to run
+ * to completion on serverless platforms, and a silently-dropped save is exactly
+ * the failure this feature exists to prevent. The cost is ~1–3s of Chromium on
+ * top of a generation that already spends far longer in the model.
+ */
+export function createResumePdfWriter(deps: ResumePdfWriterDeps): ResumeArtifactWriter {
+  const { userId, store, pdf, files, analytics } = deps;
+
+  return {
+    async onResumeCreated(resume: GeneratedResume): Promise<GeneratedResume> {
+      // Nothing to render — a contentless résumé would produce a blank page and
+      // overwrite a good PDF with it.
+      if (!resume.html.trim()) return resume;
+
+      try {
+        const bytes = await pdf.generate(resume.html);
+        const path = await files.putResumePdf({
+          userId,
+          profileId: resume.resumeProfileId,
+          pdf: bytes,
+        });
+        const updated = await store.updateGeneratedResume(resume.id, { pdfPath: path });
+        analytics?.track(
+          "resume_pdf_stored",
+          { resumeProfileId: resume.resumeProfileId, version: resume.version },
+          userId,
+        );
+        return updated;
+      } catch (err) {
+        // Swallowed on purpose — see the interface contract above. Logged with
+        // enough context to find the profile, and never with résumé content.
+        console.error(
+          `[resume-artifacts] failed to store PDF for profile ${resume.resumeProfileId} ` +
+            `(version ${resume.version}):`,
+          err,
+        );
+        return resume;
+      }
+    },
+  };
+}

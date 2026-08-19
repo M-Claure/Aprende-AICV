@@ -98,9 +98,13 @@ export const api = {
     }),
 
   getProfile: (id: string) =>
-    req<{ profile: ResumeProfile; personalInformation: PersonalInformation | null; state: ResumeProfileState }>(
-      `/api/resume-profiles/${id}`,
-    ),
+    req<{
+      profile: ResumeProfile;
+      personalInformation: PersonalInformation | null;
+      state: ResumeProfileState;
+      /** Improvement rounds completed, 0..MAX_RESUME_ITERATIONS. */
+      iteration: number;
+    }>(`/api/resume-profiles/${id}`),
 
   nextQuestion: (id: string) =>
     req<{ nextQuestion: AdaptiveQuestion; state: ResumeProfileState }>(
@@ -153,7 +157,19 @@ export const api = {
     }),
 
   generate: (id: string) =>
-    req<{ resume: GeneratedResume }>(`/api/resume-profiles/${id}/generate`, { method: "POST" }),
+    req<{ resume: GeneratedResume; iteration: number }>(`/api/resume-profiles/${id}/generate`, {
+      method: "POST",
+    }),
+
+  /** Log an improvement question + answer into the current round (iteration_N). */
+  recordIterationAnswer: (
+    id: string,
+    body: { questionId: string; question: string; answer: string },
+  ) =>
+    req<{ entry: { id: string } }>(`/api/resume-profiles/${id}/iterations`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 
   getResume: (id: string) => req<{ resume: GeneratedResume }>(`/api/resume-profiles/${id}/resume`),
 

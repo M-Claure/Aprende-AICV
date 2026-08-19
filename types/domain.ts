@@ -310,7 +310,14 @@ export interface GeneratedResume {
   projects: GeneratedProjectBlock[];
   languages: GeneratedLanguageBlock[];
   html: string;
-  pdfUrl: string | null;
+  /**
+   * Storage object path of this profile's saved PDF, or null if none was stored.
+   *
+   * There is exactly one PDF per profile and every generation replaces it, so
+   * only the LATEST version's path is meaningful — older rows may name the same
+   * object, which now holds a newer render. See `lib/storage/resume-file-store.ts`.
+   */
+  pdfPath: string | null;
   createdAt: string;
 }
 

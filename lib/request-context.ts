@@ -5,6 +5,9 @@ import { getAnalytics, type Analytics } from "@/lib/analytics";
 import { getEnv } from "@/lib/env";
 import { Errors } from "@/lib/errors";
 import { getStore, type Store } from "@/lib/repositories";
+import { getResumeFileStore, type ResumeFileStore } from "@/lib/storage";
+import { getPdfGenerator } from "@/lib/resume/pdf-generator";
+import { createResumePdfWriter, type ResumeArtifactWriter } from "@/lib/resume/resume-artifacts";
 import { resolveUserEmail, resolveUserId } from "@/lib/auth";
 
 export interface RequestContext {
@@ -15,6 +18,13 @@ export interface RequestContext {
   /** Deterministic provider — per-step funnel/capture ops (never the paid model). */
   funnelAi: AIProvider;
   analytics: Analytics;
+  /** Binary artifact storage for the profile's saved résumé PDF. */
+  resumeFiles: ResumeFileStore;
+  /**
+   * Pass this to `generateResume` / `proofreadAndRerender` so every new résumé
+   * version replaces the profile's stored PDF. Pre-bound to this request's user.
+   */
+  resumeArtifacts: ResumeArtifactWriter;
 }
 
 /**
@@ -38,12 +48,23 @@ export async function getRequestContext(): Promise<RequestContext> {
     }
   }
 
+  const analytics = getAnalytics();
+  const resumeFiles = getResumeFileStore();
+
   return {
     userId,
     store,
     ai: getAIProvider(),
     funnelAi: getFunnelProvider(),
-    analytics: getAnalytics(),
+    analytics,
+    resumeFiles,
+    resumeArtifacts: createResumePdfWriter({
+      userId,
+      store,
+      pdf: getPdfGenerator(),
+      files: resumeFiles,
+      analytics,
+    }),
   };
 }
 

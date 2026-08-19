@@ -10,7 +10,6 @@ import { EditableReview } from "./EditableReview";
 const improvementKey = (i: AnalysisImprovement) => `${i.questionId}:${i.entryId ?? ""}`;
 
 /** Where the per-profile regeneration count is persisted so the cap survives reloads. */
-const iterationsKey = (profileId: string) => `mcv:iterations:${profileId}`;
 
 /**
  * The résumé "workspace": a back-and-forth loop. It shows the generated résumé,
@@ -30,31 +29,23 @@ export function ResumeWorkspace({ profileId }: { profileId: string }) {
   const [reviewing, setReviewing] = useState(false);
   const [reviewNotes, setReviewNotes] = useState<string[]>([]);
   const [downloading, setDownloading] = useState(false);
-  // How many times the user has regenerated/improved this résumé. Hard-capped at
-  // MAX_RESUME_ITERATIONS; persisted per profile so a page reload can't reset it.
+  // Improvement rounds completed. Server state (`funnel.iteration`), not
+  // localStorage: the cap is enforced by POST /generate, so clearing site data
+  // no longer hands the user extra rounds. This copy only drives the copy shown.
   const [iterations, setIterations] = useState(0);
   const busy = regenerating || reviewing || downloading;
   const atLimit = iterations >= MAX_RESUME_ITERATIONS;
   const remaining = Math.max(0, MAX_RESUME_ITERATIONS - iterations);
-
-  // Restore the saved iteration count for this profile (client-only).
-  useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(iterationsKey(profileId));
-      const n = raw ? parseInt(raw, 10) : 0;
-      if (Number.isFinite(n) && n > 0) setIterations(Math.min(MAX_RESUME_ITERATIONS, n));
-    } catch {
-      /* localStorage unavailable — fall back to in-memory counting */
-    }
-  }, [profileId]);
 
   // Load whether this résumé is already finalized (controls the download gate).
   useEffect(() => {
     let cancelled = false;
     void api
       .getProfile(profileId)
-      .then(({ profile }) => {
-        if (!cancelled) setFinalizedAt(profile.finalizedAt);
+      .then(({ profile, iteration }) => {
+        if (cancelled) return;
+        setFinalizedAt(profile.finalizedAt);
+        setIterations(iteration);
       })
       .catch(() => {
         /* non-fatal: default to not-finalized */
@@ -98,6 +89,19 @@ export function ResumeWorkspace({ profileId }: { profileId: string }) {
           rawAnswer,
         });
       }
+      // Log what was asked and answered into this round's table. Best-effort:
+      // the answer is already applied above, and losing the audit row must not
+      // make the user think their answer failed.
+      void api
+        .recordIterationAnswer(profileId, {
+          questionId: imp.questionId,
+          question: imp.followUpQuestion,
+          answer: rawAnswer,
+        })
+        .catch(() => {
+          /* non-fatal */
+        });
+
       setAnswered((prev) => new Set(prev).add(improvementKey(imp)));
       setDirty(true);
     },
@@ -109,16 +113,9 @@ export function ResumeWorkspace({ profileId }: { profileId: string }) {
     setRegenerating(true);
     setError(null);
     try {
-      await api.generate(profileId);
-      setIterations((n) => {
-        const next = Math.min(MAX_RESUME_ITERATIONS, n + 1);
-        try {
-          window.localStorage.setItem(iterationsKey(profileId), String(next));
-        } catch {
-          /* ignore persistence failure */
-        }
-        return next;
-      });
+      // The server owns the counter and returns the authoritative value.
+      const { iteration } = await api.generate(profileId);
+      setIterations(iteration);
       setPreviewVersion((v) => v + 1);
       setDirty(false);
       setFinalizedAt(null); // regenerating unlocks: the new version must be re-finalized
