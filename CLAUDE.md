@@ -105,7 +105,8 @@ the same ceiling.
 The app serves **two marketing brands from one build**: `rumbo-latino` (warm,
 learner-facing, rumbolatino.com) and `aprende` (Aprende Institute — formal,
 institutional). See
-`docs/branding.md` for the full design; the rules that constrain code:
+`docs/branding.md` for the design and `docs/switching-brands.md` for the operator
+runbook; the rules that constrain code:
 
 - **Only marketing is branded.** Palette, typography, header, landing hero,
   metadata and marketing copy. The funnel, question engine, AI orchestration,
@@ -116,7 +117,10 @@ institutional). See
   and stamped on `x-brand`. Precedence: `?brand=` → cookie →
   `BRAND_HOST_OVERRIDES` → host match → `DEFAULT_BRAND` → `rumbo-latino`.
   `lib/brand/resolve.ts` is pure and holds the rules. The brand gates styling and
-  copy only — never data access, never a permission.
+  copy only — never data access, never a permission. Note `DEFAULT_BRAND` sits
+  *below* the host match: it cannot flip a domain a brand already claims (that is
+  what `BRAND_HOST_OVERRIDES` is for), and an unregistered value throws rather than
+  falling back silently.
 - **`BrandConfig` is pure, serializable data** (`lib/brand/brands/*.ts`): no React,
   no `next/*`, no `server-only`, no I/O. That is what lets edge middleware,
   Server Components and Client Components all read the same object. Per-brand

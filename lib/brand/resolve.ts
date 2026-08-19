@@ -1,4 +1,4 @@
-import { BRANDS, FALLBACK_BRAND_ID, isBrandId, type BrandId } from "@/lib/brand/registry";
+import { BRANDS, BRAND_IDS, FALLBACK_BRAND_ID, isBrandId, type BrandId } from "@/lib/brand/registry";
 
 /**
  * Brand resolution — PURE. Every input is passed in, so this is testable without
@@ -103,6 +103,8 @@ export function parseHostOverrides(raw: string | null | undefined): Record<strin
 
 /** Apply the documented precedence. */
 export function resolveBrand(input: BrandResolutionInput): BrandResolution {
+  assertValidEnvDefault(input.envDefault);
+
   if (isBrandId(input.query)) return { brandId: input.query, source: "query" };
 
   // A present-but-unrecognised `?brand=` is an explicit reset (`?brand=auto`), so
@@ -123,6 +125,27 @@ export function resolveBrand(input: BrandResolutionInput): BrandResolution {
   if (isBrandId(input.envDefault)) return { brandId: input.envDefault, source: "env-default" };
 
   return { brandId: FALLBACK_BRAND_ID, source: "fallback" };
+}
+
+/**
+ * A misspelled `DEFAULT_BRAND` is a deploy mistake, and the failure mode without
+ * this check is the worst possible one: the value is ignored, the site quietly
+ * serves the fallback brand, and nobody notices they shipped the wrong company's
+ * branding. Better to break the deployment with a message naming the valid values.
+ *
+ * Checked before the precedence rules rather than at the point of use, so the typo
+ * surfaces even when the host would have decided the brand anyway — otherwise it
+ * would lie dormant until the day the domain changes.
+ *
+ * `undefined`, `null` and `""` all mean "not set", which is valid.
+ */
+function assertValidEnvDefault(value: string | null | undefined): void {
+  if (value === null || value === undefined || value === "") return;
+  if (isBrandId(value)) return;
+  throw new Error(
+    `DEFAULT_BRAND="${value}" is not a registered brand. ` +
+      `Valid values: ${BRAND_IDS.join(", ")}. See docs/switching-brands.md.`,
+  );
 }
 
 /**

@@ -172,9 +172,37 @@ describe("resolution precedence", () => {
       brandId: "aprende",
       source: "host",
     });
-    expect(resolveBrand({ host: "aprende.com", envDefault: "bogus" })).toEqual({
-      brandId: "aprende",
+  });
+
+  it("refuses to start on a misspelled DEFAULT_BRAND instead of ignoring it", () => {
+    // The silent-fallback failure mode is the dangerous one: the deploy comes up
+    // serving the wrong company's branding and nothing says so.
+    expect(() => resolveBrand({ host: "x.vercel.app", envDefault: "Aprende" })).toThrow(
+      /DEFAULT_BRAND="Aprende" is not a registered brand/,
+    );
+    expect(() => resolveBrand({ envDefault: "aprende-institute" })).toThrow(/Valid values:/);
+    // Even when the host would have decided anyway — otherwise the typo lies
+    // dormant until the domain changes.
+    expect(() => resolveBrand({ host: "rumbolatino.com", envDefault: "nope" })).toThrow();
+  });
+
+  it("treats unset, null and empty as 'not configured'", () => {
+    for (const envDefault of [undefined, null, ""]) {
+      expect(() => resolveBrand({ host: "rumbolatino.com", envDefault })).not.toThrow();
+    }
+  });
+
+  it("does NOT override a host that a brand already claims", () => {
+    // The single most misread rule in the system, and the reason
+    // docs/switching-brands.md leads with BRAND_HOST_OVERRIDES for production.
+    expect(resolveBrand({ host: "rumbolatino.com", envDefault: "aprende" })).toEqual({
+      brandId: "rumbo-latino",
       source: "host",
+    });
+    // It does decide on hosts nobody claims — previews and localhost.
+    expect(resolveBrand({ host: "my-app-git-x.vercel.app", envDefault: "aprende" })).toEqual({
+      brandId: "aprende",
+      source: "env-default",
     });
   });
 });

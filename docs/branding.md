@@ -24,6 +24,10 @@ employers, and `lib/resume/resume-renderer.ts` keeps its own neutral print palet
 on purpose. Branding the résumé would put our marketing colours on someone else's
 job application.
 
+> **Just need to switch the live brand?** See
+> [`switching-brands.md`](./switching-brands.md). This document is the design and
+> the internals.
+
 ## How a brand is chosen
 
 Host-based, resolved once per request in `middleware.ts` and stamped on the
@@ -40,7 +44,10 @@ Precedence — first match wins (`lib/brand/resolve.ts`):
 3. **`BRAND_HOST_OVERRIDES`** — `host=brandId` pairs, for a campaign or staging
    domain, without a code change.
 4. **Host match** against each config's `hosts` (`*.example.com` wildcards allowed).
-5. **`DEFAULT_BRAND`** — for preview deploys and `localhost`.
+5. **`DEFAULT_BRAND`** — for preview deploys and `localhost`. Being *below* the
+   host match is the point: it cannot flip a domain a brand already claims, which
+   is what lets one deployment serve both domains at once. An unregistered value
+   throws at startup rather than silently falling through.
 6. **`FALLBACK_BRAND_ID`** — `rumbo-latino`, the consumer-facing brand this product
    ships under.
 

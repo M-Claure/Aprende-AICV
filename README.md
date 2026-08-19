@@ -105,6 +105,30 @@ Set in `.env.local`:
 
 Secrets without the `NEXT_PUBLIC_` prefix are **server-only** and never sent to the browser.
 
+## Branding (Rumbo Latino ⇄ Aprende Institute)
+
+One build serves two marketing brands, chosen per request from the request host.
+Only marketing changes — colours, typography, header, landing copy, logo, favicon.
+The funnel, the AI, the résumé and the database are identical.
+
+**To switch brands, see [`docs/switching-brands.md`](docs/switching-brands.md).**
+The one-line version:
+
+```bash
+DEFAULT_BRAND=aprende            # previews, localhost, unclaimed domains
+```
+
+…then redeploy. But note the rule that catches everyone out:
+
+> `DEFAULT_BRAND` is only the fallback for hosts **no brand claims**. On a domain a
+> brand already owns (`rumbolatino.com`, `aprende.com`, …) the host wins and
+> `DEFAULT_BRAND` does nothing — use `BRAND_HOST_OVERRIDES=host=brandId` there.
+> That precedence is what lets one deployment serve both domains at once.
+
+`<html data-brand="…">` on any page names the brand that actually rendered. Append
+`?brand=aprende` to any URL to preview the other brand without changing config.
+Design and internals: [`docs/branding.md`](docs/branding.md).
+
 ## Scripts
 
 | Command | Purpose |
