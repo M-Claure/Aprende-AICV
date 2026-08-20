@@ -6,7 +6,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { MemoryStore } from "@/lib/repositories/memory-store";
 import { MockAIProvider } from "@/lib/ai/mock-provider";
 import { NoopAnalytics } from "@/lib/analytics";
-import { MAX_EDUCATION_ENTRIES, MAX_EXPERIENCE_ENTRIES } from "@/lib/config/limits";
+import {
+  MAX_EDUCATION_ENTRIES,
+  MAX_EDUCATION_ENTRIES_PER_ANSWER,
+  MAX_EXPERIENCE_ENTRIES,
+} from "@/lib/config/limits";
 import { processAnswer, type PipelineContext } from "@/lib/services/answer-pipeline";
 import type { AIProvider } from "@/lib/ai";
 import type { AnswerNormalization } from "@/lib/ai/schemas";
@@ -150,7 +154,21 @@ describe("education cap", () => {
     };
   }
 
-  it("creates at most MAX_EDUCATION_ENTRIES from one answer", async () => {
+  it("opens one education slot per answer, with room to add a second by hand", () => {
+    // The funnel asks one education question, so one answer must never open a
+    // second slot — but a person may still add one on the review screen. Both
+    // numbers are pinned: they are the whole mechanism, since `education` is a
+    // rich-capture section and the model can split one sentence into several
+    // entries.
+    expect(MAX_EDUCATION_ENTRIES_PER_ANSWER).toBe(1);
+    expect(MAX_EDUCATION_ENTRIES).toBe(2);
+  });
+
+  it("creates ONE education entry from one answer, however many the model returns", async () => {
+    // The reported bug: "Terminé la secundaria y estudié seis meses de
+    // administración" is split by the model into two studies, and both were
+    // created — filling the cap from a single question and leaving a second,
+    // half-empty card on the review screen.
     await processAnswer(
       { ...ctx, ai: greedyEducationProvider(MAX_EDUCATION_ENTRIES + 3) },
       {
@@ -161,7 +179,25 @@ describe("education cap", () => {
       },
     );
 
-    expect((await store.listEducation(profileId)).length).toBe(MAX_EDUCATION_ENTRIES);
+    const list = await store.listEducation(profileId);
+    expect(list.length).toBe(MAX_EDUCATION_ENTRIES_PER_ANSWER);
+    expect(list.length).toBeLessThan(MAX_EDUCATION_ENTRIES); // room left to add one
+    expect(list[0]?.credential).toBe("Estudio 1"); // the first mentioned, not the last
+  });
+
+  it("lets a second entry be added by hand, up to the cap", async () => {
+    // What "+ Agregar" on the review screen does, and where it stops.
+    await processAnswer(ctx, {
+      profileId,
+      questionId: "education_highest",
+      section: "education",
+      rawAnswer: "Terminé la secundaria",
+    });
+    await store.createEducation(profileId, { credential: "Curso de administración" });
+
+    const list = await store.listEducation(profileId);
+    expect(list.length).toBe(MAX_EDUCATION_ENTRIES);
+    expect(list.map((e) => e.credential)).toEqual(["Terminé la secundaria", "Curso de administración"]);
   });
 
   it("creates nothing more once the profile is already at the cap", async () => {
@@ -181,9 +217,13 @@ describe("education cap", () => {
 
   it("still updates an existing entry instead of creating when at the cap", async () => {
     // education_details targets the most recent entry — capping creation must not
-    // break the enrichment path that walks entries already captured.
-    const first = await store.createEducation(profileId, { credential: "Secundaria" });
-    await store.createEducation(profileId, { credential: "Curso técnico" });
+    // break the enrichment path that walks entries already captured. Filled to the
+    // cap rather than to a fixed 2, so this keeps testing the same thing whatever
+    // MAX_EDUCATION_ENTRIES is.
+    let latest = await store.createEducation(profileId, { credential: "Secundaria" });
+    for (let i = 1; i < MAX_EDUCATION_ENTRIES; i++) {
+      latest = await store.createEducation(profileId, { credential: `Curso ${i}` });
+    }
 
     const res = await processAnswer(ctx, {
       profileId,
@@ -193,8 +233,8 @@ describe("education cap", () => {
     });
 
     const list = await store.listEducation(profileId);
-    expect(list.length).toBe(MAX_EDUCATION_ENTRIES);
-    expect(res.affectedEntryId).not.toBe(first.id); // the latest entry, not a new one
+    expect(list.length).toBe(MAX_EDUCATION_ENTRIES); // enriched, not appended
+    expect(res.affectedEntryId).toBe(latest.id); // the latest entry, not a new one
   });
 });
 

@@ -166,36 +166,154 @@ function detectGaps(state: ResumeProfileState): ImprovementDraft[] {
   return out.sort((a, b) => FOLLOWUP_DEFS[a.questionId]!.priority - FOLLOWUP_DEFS[b.questionId]!.priority);
 }
 
+/**
+ * Any id, in any user-facing string, is a bug — enforced here rather than asked
+ * for in the prompt.
+ *
+ * The analysis prompt hands the model every entry's id, because it needs them to
+ * target a deep-dive (`entryId`), and asks it to name the experience or project it
+ * is asking about. When an entry is BLANK — the person skipped that section, so
+ * there is no title, organization or name to use — the only handle left is the id,
+ * and the model writes that instead: «Cuéntame más sobre
+ * «a93ce414-1138-483c-b346-bfc020affd8c»».
+ *
+ * Deleting the id is not enough: "Sobre «<id>»: ¿qué herramientas usaste?" becomes
+ * "Sobre: ¿qué herramientas usaste?", a question that lost its subject. So a
+ * deep-dive has the id REPLACED by the entry's human label, which is what the
+ * sentence was reaching for; anywhere else — section questions, the overall
+ * impression, the strengths — an id means the sentence carries no information for
+ * the reader, and the text is discarded for the deterministic wording instead.
+ *
+ * Both shapes are caught: the exact ids we handed over, and anything UUID-shaped.
+ */
+const UUID_RE = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
+
+function containsId(text: string, knownIds: Set<string>): boolean {
+  if (new RegExp(UUID_RE.source, "i").test(text)) return true;
+  for (const id of knownIds) if (id && text.includes(id)) return true;
+  return false;
+}
+
+/** Swap every id for `name`, then tidy what the substitution leaves behind. */
+function replaceIds(text: string, knownIds: Set<string>, name: string): string {
+  let out = text.replace(UUID_RE, name);
+  for (const id of knownIds) {
+    if (id) out = out.split(id).join(name);
+  }
+  return out
+    // The id often already sat inside quotes, so substituting a label can double them.
+    .replace(/«\s*«/g, "«")
+    .replace(/»\s*»/g, "»")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([,.;:!?])/g, "$1")
+    .trim();
+}
+
+/**
+ * True when a string is no longer usable as a question or title — it was only ever
+ * an id, or the repair left nothing meaningful.
+ */
+function degenerate(text: string): boolean {
+  return text.replace(/[^\p{L}\p{N}]/gu, "").length < 3;
+}
+
+/**
+ * Scrub a model-authored improvement. `entryName` is the label to substitute for a
+ * deep-dive; pass `null` for a section question, where an id cannot be repaired
+ * into anything meaningful and `defaults` are used instead.
+ */
+function scrubImprovement(
+  draft: ImprovementDraft,
+  knownIds: Set<string>,
+  entryName: string | null,
+  defaults: { title: string; followUpQuestion: string },
+): ImprovementDraft {
+  const fix = (text: string, fallback: string): string => {
+    if (!containsId(text, knownIds)) return text;
+    if (entryName === null) return fallback;
+    const repaired = replaceIds(text, knownIds, entryName);
+    return degenerate(repaired) ? fallback : repaired;
+  };
+  // `detail` is a required string on the improvement, and the workspace hides it
+  // when empty — so "" is how an unrepairable "why this helps" line is dropped.
+  const rawDetail = draft.detail ?? "";
+  const detail = !containsId(rawDetail, knownIds)
+    ? rawDetail
+    : entryName === null
+      ? ""
+      : (() => {
+          const repaired = replaceIds(rawDetail, knownIds, entryName);
+          return degenerate(repaired) ? "" : repaired;
+        })();
+
+  return {
+    ...draft,
+    title: fix(draft.title, defaults.title),
+    followUpQuestion: fix(draft.followUpQuestion, defaults.followUpQuestion),
+    detail,
+  };
+}
+
+/**
+ * The human label a deep-dive question uses for an entry — never an id.
+ *
+ * A blank entry (the person skipped that section) has no title, organization or
+ * name, so it falls back to a generic phrase. Shared by the deterministic pass and
+ * the AI merge so the two cannot word the same question differently.
+ */
+function experienceName(e: ResumeProfileState["experience"][number]): string {
+  return e.title || e.organization || "esta experiencia";
+}
+
+function projectName(p: ResumeProfileState["projects"][number]): string {
+  return p.name || "este proyecto";
+}
+
+/** The bare name for an entry, for substituting into a sentence. */
+function nameForEntry(
+  state: ResumeProfileState,
+  type: "experience" | "project",
+  entryId: string | undefined,
+): string {
+  if (type === "experience") {
+    const e = state.experience.find((x) => x.id === entryId);
+    return e ? experienceName(e) : "esta experiencia";
+  }
+  const p = state.projects.find((x) => x.id === entryId);
+  return p ? projectName(p) : "este proyecto";
+}
+
 /** Personalized deep-dive questions targeting specific thin experience/project entries. */
 function detectDeepDives(state: ResumeProfileState): ImprovementDraft[] {
   const out: ImprovementDraft[] = [];
   for (const e of state.experience) {
     const thin = e.tools.length === 0 || e.responsibilities.length + e.accomplishments.length < 3;
     if (!thin) continue;
-    const label = e.title || e.organization || "esta experiencia";
+    const label = `«${experienceName(e)}»`;
     out.push({
       questionId: "experience_deepen",
       entryType: "experience",
       entryId: e.id,
       section: "experience",
       inputType: "long_text",
-      title: `Cuéntame más sobre «${label}»`,
+      title: `Cuéntame más sobre ${label}`,
       detail: "Más detalle (herramientas, cómo lo hiciste, resultados) hace esta experiencia mucho más fuerte.",
-      followUpQuestion: `Sobre «${label}»: ¿qué herramientas o programas usaste y cómo lo lograste?`,
+      followUpQuestion: `Sobre ${label}: ¿qué herramientas o programas usaste y cómo lo lograste?`,
     });
   }
   for (const p of state.projects) {
     const thin = p.tools.length === 0 || p.responsibilities.length + p.outcomes.length < 2;
     if (!thin) continue;
+    const label = `«${projectName(p)}»`;
     out.push({
       questionId: "project_deepen",
       entryType: "project",
       entryId: p.id,
       section: "project",
       inputType: "long_text",
-      title: `Cuéntame más sobre «${p.name}»`,
+      title: `Cuéntame más sobre ${label}`,
       detail: "Explica qué herramientas usaste, cómo lo construiste y qué lograste.",
-      followUpQuestion: `Sobre «${p.name}»: ¿qué herramientas o tecnologías usaste, cómo lo hiciste y qué resultado obtuviste?`,
+      followUpQuestion: `Sobre ${label}: ¿qué herramientas o tecnologías usaste, cómo lo hiciste y qué resultado obtuviste?`,
     });
   }
   return out;
@@ -256,6 +374,8 @@ export async function analyzeResume(store: Store, ai: AIProvider, profileId: str
   const deepDives = detectDeepDives(state);
   const experienceIds = new Set(state.experience.map((e) => e.id));
   const projectIds = new Set(state.projects.map((p) => p.id));
+  // Every id the model was shown, so an echo of one can be recognised verbatim.
+  const knownIds = new Set([...experienceIds, ...projectIds]);
 
   // The AI adds impression/strengths/better wording, but the deterministic gaps +
   // deep-dives are the routable source of truth. If the AI call fails (validation,
@@ -293,35 +413,69 @@ export async function analyzeResume(store: Store, ai: AIProvider, profileId: str
       // Entry deep-dive: entryId must reference a real entry of the right type.
       const valid = deepenType === "experience" ? experienceIds.has(imp.entryId ?? "") : projectIds.has(imp.entryId ?? "");
       if (!valid) continue;
-      byId.set(key(imp), {
-        questionId: imp.questionId,
-        entryType: deepenType,
-        entryId: imp.entryId,
-        section: deepenType,
-        inputType: "long_text",
-        title: imp.title,
-        detail: imp.detail,
-        followUpQuestion: imp.followUpQuestion,
-      });
+      // A deep-dive the deterministic pass also found gives us safe wording to
+      // fall back on; otherwise build the same label the same way it does.
+      const fallback = byId.get(key(imp));
+      const name = nameForEntry(state, deepenType, imp.entryId);
+      byId.set(
+        key(imp),
+        scrubImprovement(
+          {
+            questionId: imp.questionId,
+            entryType: deepenType,
+            entryId: imp.entryId,
+            section: deepenType,
+            inputType: "long_text",
+            title: imp.title,
+            detail: imp.detail,
+            followUpQuestion: imp.followUpQuestion,
+          },
+          knownIds,
+          name,
+          {
+            title: fallback?.title ?? `Cuéntame más sobre «${name}»`,
+            followUpQuestion:
+              fallback?.followUpQuestion ??
+              `Sobre «${name}»: ¿qué herramientas o programas usaste y cómo lo lograste?`,
+          },
+        ),
+      );
       continue;
     }
     const def = FOLLOWUP_DEFS[imp.questionId];
     if (!def) continue; // ignore questionIds outside the allow-list
-    byId.set(key(imp), {
-      questionId: imp.questionId,
-      section: def.section,
-      inputType: def.inputType,
-      title: imp.title || def.title,
-      detail: imp.detail,
-      followUpQuestion: imp.followUpQuestion || def.defaultQuestion,
-    });
+    byId.set(
+      key(imp),
+      scrubImprovement(
+        {
+          questionId: imp.questionId,
+          section: def.section,
+          inputType: def.inputType,
+          title: imp.title || def.title,
+          detail: imp.detail,
+          followUpQuestion: imp.followUpQuestion || def.defaultQuestion,
+        },
+        knownIds,
+        null,
+        { title: def.title, followUpQuestion: def.defaultQuestion },
+      ),
+    );
   }
 
   const improvements = selectImprovements([...byId.values()]).map(withCharLimit);
 
   const analysis: ResumeAnalysis = {
-    overallImpression: ai_result.overallImpression,
-    strengths: ai_result.strengths,
+    // Shown verbatim on the workspace screen. A sentence built around an id says
+    // nothing to the reader and cannot be repaired without knowing which entry it
+    // meant, so it is replaced wholesale / dropped rather than patched.
+    overallImpression:
+      containsId(ai_result.overallImpression, knownIds) ||
+      degenerate(ai_result.overallImpression)
+        ? "Tu currículum ya tiene una base sólida. Responde las siguientes preguntas para hacerlo más completo y fuerte."
+        : ai_result.overallImpression,
+    strengths: ai_result.strengths.filter(
+      (sTxt) => !containsId(sTxt, knownIds) && !degenerate(sTxt),
+    ),
     improvements,
   };
   setCachedAnalysis(profileId, cacheKey, analysis);

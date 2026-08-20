@@ -10,7 +10,8 @@ import type { BrandConfig } from "@/lib/brand/types";
  * the app chrome that carries "MI CV CON IA", and it uses the brand's own accent.
  *
  * Height must stay in sync with `headerHeight` in the Rumbo Latino config
- * (4px rule + 64px bar = 68px = 4.25rem) — `.min-h-page` subtracts it.
+ * (4px rule + 64px bar + 1px bottom hairline = 69px = 4.3125rem) — `.min-h-page`
+ * subtracts it, so forgetting the border leaves the page 1px too tall.
  */
 export function RumboLatinoHeader({ brand }: { brand: BrandConfig }) {
   return (

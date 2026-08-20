@@ -99,14 +99,13 @@ describe("brand config shape", () => {
   });
 
   it.each(BRAND_IDS)("%s supplies the marketing copy the hero renders", (id) => {
-    const { hero, contactStep, auth, legal } = BRANDS[id];
+    const { hero, contactStep, legal } = BRANDS[id];
     expect(hero.headline.length).toBeGreaterThan(0);
     expect(hero.lede.length).toBeGreaterThan(0);
     expect(hero.ctaLabel.length).toBeGreaterThan(0);
     expect(hero.ctaBlockedHint.length).toBeGreaterThan(0);
     expect(hero.steps.length).toBeGreaterThan(0);
     expect(contactStep.bannerTitle.length).toBeGreaterThan(0);
-    expect(auth.bannerBody.length).toBeGreaterThan(0);
     expect(legal.termsUrl).toMatch(/^https:\/\//);
   });
 

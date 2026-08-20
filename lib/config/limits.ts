@@ -32,7 +32,7 @@ export const MAX_RESUME_ITERATIONS = 3;
 export const MAX_EXPERIENCE_ENTRIES = 4;
 
 /**
- * Hard cap on how many education entries a profile may hold.
+ * Hard cap on how many education entries a profile may HOLD.
  *
  * Tighter than the experience cap because education is a shorter list by nature —
  * the highest level completed plus one course or certificate covers almost
@@ -40,10 +40,31 @@ export const MAX_EXPERIENCE_ENTRIES = 4;
  * actually win interviews further down the page. Longer training histories belong
  * in Certificaciones, which stays uncapped.
  *
+ * Note the division of labour with `MAX_EDUCATION_ENTRIES_PER_ANSWER`: this is the
+ * ceiling, but the funnel never fills it on its own. One answer opens ONE slot;
+ * the second exists only if the person asks for it with "+ Agregar" on the review
+ * screen.
+ *
  * Enforced at every write path — the answer pipeline and
  * `POST /api/resume-profiles/:id/education` — not only in the Review UI.
  */
 export const MAX_EDUCATION_ENTRIES = 2;
+
+/**
+ * How many education entries a SINGLE answer may create. One.
+ *
+ * `education` is a rich-capture section (`RICH_CAPTURE_SECTIONS` in
+ * `lib/ai/hybrid-provider.ts`), so the model splits a narrative answer into one
+ * entry per study it finds: "Terminé la secundaria y estudié seis meses de
+ * administración" comes back as two. Creating both filled the profile to the cap
+ * from a single question — the review screen then showed a second, half-empty slot
+ * nobody asked for, and only the last entry got enriched by `education_details`.
+ *
+ * The funnel asks one education question ("el nivel más alto"), so it opens one
+ * slot. A second study is an explicit choice, made with "+ Agregar", bounded by
+ * `MAX_EDUCATION_ENTRIES`.
+ */
+export const MAX_EDUCATION_ENTRIES_PER_ANSWER = 1;
 
 /**
  * Hard cap on how many improvement questions one analysis round may ask.

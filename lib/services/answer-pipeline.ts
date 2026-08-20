@@ -16,7 +16,11 @@ import type { AIProvider } from "@/lib/ai";
 import type { Analytics } from "@/lib/analytics";
 import type { Store } from "@/lib/repositories/store";
 import { Errors } from "@/lib/errors";
-import { MAX_EDUCATION_ENTRIES, MAX_EXPERIENCE_ENTRIES } from "@/lib/config/limits";
+import {
+  MAX_EDUCATION_ENTRIES,
+  MAX_EDUCATION_ENTRIES_PER_ANSWER,
+  MAX_EXPERIENCE_ENTRIES,
+} from "@/lib/config/limits";
 import { assembleProfileState } from "@/lib/profile-state";
 import { planNextQuestion } from "@/lib/question-engine/adaptive-planner";
 import { getCatalogQuestion } from "@/lib/question-engine/question-catalog";
@@ -302,12 +306,20 @@ async function applyNormalization(
       const updated = await store.updateEducation(target.id, mapEducation(u.educationEntries[0]!));
       affectedEntryId = updated.id;
     } else {
-      // Same reasoning as the experience cap below: the count comes back from a
-      // model-normalized free-text answer, so the write is the only place that can
-      // guarantee it. Entries beyond the cap are dropped rather than failing the
-      // answer, so what fits is still captured.
+      // ONE slot per answer, never the whole cap. The model splits a narrative
+      // answer into one entry per study it finds ("secundaria y seis meses de
+      // administración" → two), and creating all of them filled the profile to
+      // MAX_EDUCATION_ENTRIES from a single question, leaving a second half-empty
+      // card on the review screen that nobody asked for. A second study is now an
+      // explicit choice: "+ Agregar" there, bounded by the cap.
+      //
+      // Entry [0] is the one kept because the model returns studies in the order
+      // they were mentioned and the question asks for the highest level, which
+      // people state first. Extras are dropped rather than failing the answer —
+      // same trade as the experience cap below — and Certificaciones (uncapped) is
+      // where a short course belongs anyway.
       const room = Math.max(0, MAX_EDUCATION_ENTRIES - list.length);
-      for (const e of u.educationEntries.slice(0, room)) {
+      for (const e of u.educationEntries.slice(0, Math.min(room, MAX_EDUCATION_ENTRIES_PER_ANSWER))) {
         const created = await store.createEducation(profileId, mapEducation(e));
         affectedEntryId = created.id;
         addedEducation = true;

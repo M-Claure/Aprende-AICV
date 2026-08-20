@@ -129,11 +129,5 @@ export const aprendeBrand: BrandConfig = {
     ctaLabel: "Continuar",
   },
 
-  auth: {
-    bannerBody:
-      "Necesitas una cuenta para guardar tu currículum. Escribe tu correo y una contraseña.",
-    subtitle: "Tu currículum profesional",
-  },
-
   legal: { termsUrl: TERMS_URL, termsLabel: TERMS_LABEL },
 };

@@ -155,12 +155,6 @@ export interface BrandContactStep {
   ctaLabel: string;
 }
 
-/** Copy for the sign-in screen. */
-export interface BrandAuthCopy {
-  bannerBody: string;
-  subtitle: string;
-}
-
 /** Consent link. `TERMS_VERSION` stays global — see `lib/legal/terms.ts`. */
 export interface BrandLegal {
   termsUrl: string;
@@ -213,6 +207,5 @@ export interface BrandConfig {
   metadata: BrandMetadata;
   hero: BrandHero;
   contactStep: BrandContactStep;
-  auth: BrandAuthCopy;
   legal: BrandLegal;
 }

@@ -100,7 +100,8 @@ Two consequences show up in every brand config:
 
 ### Known exceptions
 
-Four pairs sit below AA, all taken verbatim from rumbolatino.com and all pinned in
+Five pairs sit below AA (the table's last row is three), all taken verbatim from
+rumbolatino.com and all pinned in
 `KNOWN_BELOW_AA` so they cannot widen and stay visible in review:
 
 | Pair | Ratio | Note |

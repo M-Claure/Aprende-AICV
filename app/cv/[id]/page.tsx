@@ -1,10 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import type { AdaptiveQuestion } from "@/lib/ai/schemas";
 import type { ResumeProfileState } from "@/types";
-import { api, ApiError, type AnswerPayload } from "@/lib/client/api";
+import { api, type AnswerPayload } from "@/lib/client/api";
 import { answerCharLimitForQuestion } from "@/lib/answer-limits";
 import { MAX_EXPERIENCE_ENTRIES } from "@/lib/config/limits";
 import { InstructionBanner, ProgressBar, Spinner } from "@/components/primitives";
@@ -53,7 +52,6 @@ function deviceCategory(): "mobile" | "tablet" | "desktop" | undefined {
 
 export default function CvFlowPage({ params }: { params: { id: string } }) {
   const profileId = params.id;
-  const router = useRouter();
 
   const [phase, setPhase] = useState<Phase>("loading");
   const [question, setQuestion] = useState<AdaptiveQuestion | null>(null);
@@ -75,17 +73,10 @@ export default function CvFlowPage({ params }: { params: { id: string } }) {
    * press Continuar again. Losing a half-finished résumé to one transient error
    * is a guaranteed abandonment.
    */
-  const handleError = useCallback(
-    (err: unknown, { fatal = false }: { fatal?: boolean } = {}) => {
-      if (err instanceof ApiError && err.code === "unauthorized") {
-        router.push("/login");
-        return;
-      }
-      setError(err instanceof Error ? err.message : "Ocurrió un error.");
-      if (fatal) setPhase("error");
-    },
-    [router],
-  );
+  const handleError = useCallback((err: unknown, { fatal = false }: { fatal?: boolean } = {}) => {
+    setError(err instanceof Error ? err.message : "Ocurrió un error.");
+    if (fatal) setPhase("error");
+  }, []);
 
   // Load the first question.
   useEffect(() => {

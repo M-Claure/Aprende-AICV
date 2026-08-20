@@ -364,6 +364,7 @@ Tu tarea:
   * Para secciones faltantes (idiomas, intereses, habilidades, etc.), usa el questionId de sección correspondiente (sin entryId).
   * Prioriza profundizar en experiencias/proyectos con poco detalle y señalar cualquier redundancia.
 - Cada improvement lleva "followUpQuestion" (claro y amable), "title" corto y "detail" (por qué ayuda). No inventes datos ni sugieras exagerar; el objetivo es reunir más información verdadera.
+- NUNCA escribas un id en un texto que la persona vaya a leer ("title", "detail", "followUpQuestion", "overallImpression", "strengths"). Los ids son SOLO para el campo "entryId". Si una entrada está vacía y no tiene nombre, di "esta experiencia" o "este proyecto".
 
 ${JSON_ONLY} Debe cumplir el esquema ResumeAnalysis: { overallImpression, strengths[], improvements[] } donde cada improvement es { questionId, entryId?, title, detail, followUpQuestion }.`;
 }

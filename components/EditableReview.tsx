@@ -857,7 +857,7 @@ function SaveRow({
     <div className="mt-2 flex flex-wrap items-center justify-end gap-3">
       {blocked && (
         <span className="mr-auto text-xs font-semibold text-red-600">
-          Acorta el texto en rojo para poder guardar.
+          Acorta lo que está marcado en rojo para poder guardar.
         </span>
       )}
       {onDelete && (

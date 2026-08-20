@@ -220,13 +220,20 @@ export const QUESTION_CATALOG: CatalogQuestion[] = [
     id: "education_highest",
     section: "education",
     text: "¿Cuál es el nivel de educación más alto que completaste?",
-    supportingText: "Cuenta también cursos cortos o técnicos: todo suma.",
-    intent: "Capturar la formación educativa (a menudo más fácil de responder primero).",
-    exampleAnswer: "Terminé la secundaria y estudié seis meses de administración.",
+    // Asks for ONE study, because there is one education slot
+    // (`MAX_EDUCATION_ENTRIES`). The old wording invited "también cursos cortos"
+    // and the example named two studies, so the model split the answer in two and
+    // the second entry was dropped at the write path. Short courses have their own
+    // uncapped home: `certifications_any` asks for "certificados o cursos".
+    supportingText:
+      "Solo el más alto: primaria, secundaria, preparatoria, carrera o técnico. " +
+      "Tus cursos y certificados te los preguntamos más adelante.",
+    intent: "Capturar el nivel educativo más alto (a menudo más fácil de responder primero).",
+    exampleAnswer: "Terminé la secundaria.",
     inputType: "long_text",
     required: false,
     allowSkip: true,
-    charLimit: 200, // nivel + un curso corto; tope de credential en el esquema de IA
+    charLimit: 200, // el nivel, con espacio para explicarlo con sus palabras
     precondition: (s) => s.education.length === 0,
     completionEffect: ["education"],
     priority: 30,

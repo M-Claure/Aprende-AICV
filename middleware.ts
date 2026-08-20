@@ -90,8 +90,10 @@ function persistBrandCookie(
  *      connectivity to the app's external services (see `lib/connectivity.ts`).
  *   2. Brand resolution: stamp the resolved brand on the request so the render
  *      tree can read it (see `lib/brand/server.ts`).
- *   3. Refresh the Supabase auth session so Server Components and route
- *      handlers see a valid session.
+ *   3. Refresh the Supabase session so Server Components and route handlers see
+ *      a valid one. There is no login in this product — the session belongs to a
+ *      guest created on the first request that needs it (see `lib/auth.ts`) — but
+ *      it still expires, so it still has to be refreshed here.
  */
 export async function middleware(request: NextRequest) {
   // Online-only guard: the app must not function without a connection.
@@ -123,7 +125,9 @@ export async function middleware(request: NextRequest) {
     },
   });
 
-  // Touching getUser() refreshes the session token cookie when needed.
+  // Touching getUser() refreshes the session token cookie when needed. It never
+  // *creates* a session: a guest is minted lazily in a route handler, which is the
+  // only place a cookie write survives (see `lib/auth.ts`).
   await supabase.auth.getUser();
   return response;
 }

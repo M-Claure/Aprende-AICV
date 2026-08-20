@@ -9,8 +9,6 @@ import { EditableReview } from "./EditableReview";
 /** Unique key per improvement (deep-dives share a questionId but differ by entryId). */
 const improvementKey = (i: AnalysisImprovement) => `${i.questionId}:${i.entryId ?? ""}`;
 
-/** Where the per-profile regeneration count is persisted so the cap survives reloads. */
-
 /**
  * The résumé "workspace": a back-and-forth loop. It shows the generated résumé,
  * runs an AI analysis (strengths + targeted improvement questions), lets the
@@ -31,7 +29,7 @@ export function ResumeWorkspace({ profileId }: { profileId: string }) {
   const [downloading, setDownloading] = useState(false);
   // Improvement rounds completed. Server state (`funnel.iteration`), not
   // localStorage: the cap is enforced by POST /generate, so clearing site data
-  // no longer hands the user extra rounds. This copy only drives the copy shown.
+  // no longer hands the user extra rounds. This state only drives the copy shown.
   const [iterations, setIterations] = useState(0);
   const busy = regenerating || reviewing || downloading;
   const atLimit = iterations >= MAX_RESUME_ITERATIONS;
@@ -210,19 +208,19 @@ export function ResumeWorkspace({ profileId }: { profileId: string }) {
     <div className="flex flex-col gap-5">
       {finalizedAt ? (
         <InstructionBanner icon="⬇️" title="Tu currículum está listo">
-          Aprieta el botón verde &quot;Descargar PDF&quot; para guardarlo en tu teléfono o
+          Aprieta el botón &quot;Descargar PDF&quot; para guardarlo en tu teléfono o
           computadora. Si quieres cambiar algo, aprieta &quot;Seguir editando&quot;.
         </InstructionBanner>
       ) : atLimit ? (
         <InstructionBanner icon="✅" title="Ya terminaste de mejorar tu currículum">
-          Lo mejoraste el máximo de {MAX_RESUME_ITERATIONS} veces. Ahora aprieta el botón verde
+          Lo mejoraste el máximo de {MAX_RESUME_ITERATIONS} veces. Ahora aprieta el botón
           &quot;Revisar y finalizar&quot; y luego descárgalo.
         </InstructionBanner>
       ) : (
         <InstructionBanner icon="📄" title="Este es tu currículum">
           Abajo puedes ver cómo quedó. Responde las preguntas y aprieta &quot;Regenerar&quot; para
           mejorarlo. Puedes mejorarlo hasta {MAX_RESUME_ITERATIONS} veces (te quedan {remaining}).
-          Cuando te guste, aprieta el botón verde para revisarlo y guardarlo.
+          Cuando te guste, aprieta &quot;Revisar y finalizar&quot; para revisarlo y guardarlo.
         </InstructionBanner>
       )}
 

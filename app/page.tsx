@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, ApiError } from "@/lib/client/api";
+import { api } from "@/lib/client/api";
 import { Button, InstructionBanner, Spinner } from "@/components/primitives";
 import { CONTACT_FIELD_CHAR_LIMITS } from "@/lib/answer-limits";
 import { isEmail, isPhone } from "@/lib/personal-contact";
@@ -76,10 +76,8 @@ export default function HomePage() {
       });
       router.push(`/cv/${profile.id}`);
     } catch (err) {
-      if (err instanceof ApiError && err.code === "unauthorized") {
-        router.push("/login");
-        return;
-      }
+      // There is no login to fall back to: the session is created server-side on
+      // this very call (lib/auth.ts), so a failure here is just a retryable error.
       setError(err instanceof Error ? err.message : "No se pudo iniciar. Intenta de nuevo.");
       setLoading(false);
     }

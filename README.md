@@ -33,8 +33,11 @@ info, education, experience, skills) before generating. After it's generated you
 in a **résumé workspace**: the AI analyzes the résumé, lists strengths and **targeted
 follow-up questions** to fill gaps (missing languages/interests, thin experience,
 etc.), and you answer them inline and **regenerate** — an iterative back-and-forth
-that keeps improving the résumé. Finally you download the PDF. Supabase auth is
-always required, so unauthenticated users are sent to `/login` (email + password).
+that keeps improving the résumé. Finally you download the PDF. There is **no login
+and no sign-up**: the first request that needs an identity starts a Supabase guest
+session behind the scenes (`lib/auth.ts`), so the visitor goes straight from the
+landing page into the funnel. The résumé lives with that session's cookies —
+clearing them starts a new one.
 
 > **Honesty:** the AI makes wording stronger and draws out real detail, but it does
 > not fabricate or inflate facts (no invented metrics, employers, or achievements).

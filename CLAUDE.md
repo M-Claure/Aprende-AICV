@@ -17,7 +17,7 @@ English field names for code clarity.
 > The source-of-truth design is a **Pencil file** (`aiCV.pen`). This repo is primarily
 > the **backend + AI orchestration + server-rendered HTML/PDF résumé** (`app/api/*`),
 > plus a **minimal working React UI** (`app/page.tsx`, `app/cv/[id]/page.tsx`,
-> `app/login/page.tsx`, `components/*`) that consumes those APIs so the product is
+> `components/*`) that consumes those APIs so the product is
 > usable end-to-end. The UI is intentionally lean — a fuller build should follow the
 > Pencil design.
 
@@ -55,9 +55,12 @@ generation + analysis** (`ai`, the end of the funnel and each regenerate). The
 - `AI_PROVIDER=azure` → a `HybridAIProvider` (`lib/ai/hybrid-provider.ts`) that
   sends the *narrative* capture that most affects résumé quality to the model —
   `normalizeAnswer` for the rich sections (`experience`, `projects`, `languages`,
-  `achievements`, `certifications`) and `extractInterests` — while keeping cheap
-  ops (question planning, skill inference, simple-field normalization:
-  name/contact/career goal/education) on the deterministic mock.
+  `achievements`, `certifications`, `education`) and `extractInterests` — while
+  keeping cheap ops (question planning, skill inference, simple-field
+  normalization: name/contact/career goal) on the deterministic mock. Individual
+  question ids can opt back out of the model inside a rich section when the answer
+  carries no narrative (`MECHANICAL_QUESTION_IDS`: the experience counter payload,
+  and the experience/education date answers).
 
 **The AI backend is Azure OpenAI** (`lib/ai/azure-openai-provider.ts`), reached with
 the stock `openai` SDK pointed at the resource's **v1** endpoint
@@ -134,7 +137,7 @@ runbook; the rules that constrain code:
   values (`brand-strong`, `brand-mark`, `brand-support`) are for the marketing
   layer alone.
 - **Contrast is enforced, not hoped for.** `tests/unit/brand-theme.test.ts` asserts
-  WCAG AA (4.5:1) for every registered brand. Four Rumbo Latino pairs sit below AA
+  WCAG AA (4.5:1) for every registered brand. Five Rumbo Latino pairs sit below AA
   — its white-on-coral CTA label (2.73:1) and its secondary grey — because those
   are rumbolatino.com's own values and brand fidelity was chosen over contrast by
   the product owner. They are *pinned* per brand and per pair, so they cannot
@@ -162,6 +165,36 @@ runbook; the rules that constrain code:
   they are testable without Next/Supabase.
 - Never import `lib/env`, `lib/supabase`, `lib/ai` (index), or `lib/analytics`
   from pure domain code — they are `server-only`. Pure engines import only `types`.
+
+## No accounts (no login, no sign-up)
+
+The product never asks anyone for a password. A visitor reads the hero, presses the
+CTA and is in the funnel; the identity the database needs is created *for* them.
+
+- **`resolveUserId()` (`lib/auth.ts`) is the whole mechanism.** It returns the
+  session's user when there is one, and otherwise **starts a guest session**:
+  `signInAnonymously()` first, falling back to a service-role-provisioned account
+  with random, never-stored credentials for projects that have anonymous sign-ins
+  disabled. Either way the browser carries the normal Supabase session cookies.
+- **The data model did not change.** A guest is a real `auth.users` row, so
+  `funnel.user_id`'s foreign key, every `auth.uid()` RLS policy and the Storage
+  folder rule all keep working untouched — per-user isolation is still enforced by
+  Postgres, not by the absence of a login screen.
+- **Mint the guest in a route handler only.** A Server Component cannot set cookies
+  (`lib/supabase/server.ts` swallows the throw), so a session created there would not
+  persist and every request would mint another guest — and another résumé. This is why
+  `getRequestContext` is the only caller, and why middleware refreshes sessions but
+  never creates them.
+- **The cookie is the only handle on a résumé.** Clearing site data or switching
+  device starts a fresh one; there is deliberately no recovery flow, because there is
+  no identity left to prove ownership with. Accept that trade or add real accounts —
+  do not add a half-way "enter your email to recover" path.
+- **Operationally** this needs *either* "Allow anonymous sign-ins" enabled on the
+  Supabase project (Authentication → Sign In / Providers) *or*
+  `SUPABASE_SERVICE_ROLE_KEY` set. With neither, every request fails with a logged
+  configuration error.
+- There is no `/login` route, no sign-out, and no browser-side Supabase client. Do
+  not reintroduce one; a 401 from the API is now a bug, not a prompt to log in.
 
 ## Safety rules (enforced in CODE, not just prompts)
 
@@ -276,7 +309,9 @@ is missing; improve wording without changing meaning; return valid JSON only.
   the API against a production build in mock/memory mode.
 - Always mock the AI provider in tests (`MockAIProvider`) — it obeys the same
   safety invariants and validates its own output against the shared Zod schemas.
-- `tsc --noEmit`, `vitest run`, and `playwright test` must all pass before done.
+- `tsc --noEmit` and `vitest run` must pass before done. `playwright test` must too
+  whenever it can run — while `ONLINE_ONLY` is `true` it cannot boot its mock-mode
+  server, so e2e coverage is only meaningful with that flag flipped.
 
 ## Commands
 
@@ -296,8 +331,11 @@ a runtime connectivity guard (`lib/connectivity.ts`, wired into `middleware.ts`)
 returns **503** on every request when the host has no network. You must set
 `AI_PROVIDER=azure` (+ `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_BASE_URL`) and
 `PERSISTENCE=supabase` (+ Supabase URL/keys) — see `.env.example`. PDF export
-requires `puppeteer` (installed). Note: this intentionally breaks the mock/memory-based
-unit + e2e tests as written (flip `ONLINE_ONLY` to `false` to restore offline test runs).
+requires `puppeteer` (installed). Note: this intentionally breaks the **e2e** suite,
+which boots the app with `AI_PROVIDER=mock` + `PERSISTENCE=memory` (see
+`playwright.config.ts`) — flip `ONLINE_ONLY` to `false` to run it. The **unit** suite
+is unaffected: it injects `MockAIProvider`/`MemoryStore` directly and never parses the
+environment, so `vitest run` passes as-is.
 
 ## Configuration (env)
 
@@ -310,7 +348,8 @@ All via environment variables; never commit secrets. See `.env.example`.
 ## Out of scope (do not add in milestone 1)
 
 Job applications, job matching, cover letters, interview simulation, LinkedIn
-publishing, and decorative multi-template themes. (A minimal React UI + Supabase
-email/password auth now exist; a polished, design-faithful UI is future work.
+publishing, and decorative multi-template themes. (A minimal React UI exists, with no
+login at all — see "No accounts" above; a polished, design-faithful UI is future
+work.
 Note: the **brand** system is not a "theme" system — it swaps marketing identity
 per host, not résumé templates, which remain single and neutral.)

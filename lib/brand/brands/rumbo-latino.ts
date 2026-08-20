@@ -75,7 +75,7 @@ export const rumboLatinoBrand: BrandConfig = {
   softShadow: "0 10px 30px rgba(59, 46, 88, 0.08)",
 
   /** 4px accent rule + 64px bar. Kept in sync with `RumboLatinoHeader`. */
-  headerHeight: "4.25rem",
+  headerHeight: "4.3125rem",
 
   /**
    * The isologo is assembled the way rumbolatino.com assembles it: the rising
@@ -126,13 +126,6 @@ export const rumboLatinoBrand: BrandConfig = {
     bannerBody:
       "Pon tu nombre y cómo te pueden contactar. Esto va en tu currículum para que te puedan llamar.",
     ctaLabel: "Continuar",
-  },
-
-  auth: {
-    bannerBody:
-      "Necesitas una cuenta para guardar tu currículum y que no se pierda. Escribe tu correo y " +
-      "una contraseña.",
-    subtitle: "Tu currículum para buscar trabajo",
   },
 
   legal: { termsUrl: TERMS_URL, termsLabel: TERMS_LABEL },
