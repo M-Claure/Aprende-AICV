@@ -135,7 +135,13 @@ export class SupabaseStore implements Store {
     const { data, error } = await this.client
       .from("funnel")
       .select("*")
-      .contains(column, [{ id: entryId }])
+      // The filter value MUST be a pre-serialized JSON string, not an array.
+      // postgrest-js branches on the argument's type: an array is encoded as a
+      // POSTGRES ARRAY literal via `value.join(',')`, which for `[{id}]` yields
+      // the literal text `cs.{[object Object]}` and every call fails with
+      // "invalid input syntax for type json". A string is passed through as-is,
+      // giving the JSONB containment this needs: `cs.[{"id":"…"}]`.
+      .contains(column, JSON.stringify([{ id: entryId }]))
       .limit(1)
       .maybeSingle();
     if (error) throw Errors.internal(error.message);

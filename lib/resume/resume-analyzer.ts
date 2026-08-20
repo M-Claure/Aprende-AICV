@@ -148,12 +148,28 @@ export interface ResumeAnalysis {
 }
 
 /** Deterministic gaps → baseline improvements (always routable). */
+/**
+ * Follow-ups the person already declined in the funnel.
+ *
+ * Several `FOLLOWUP_DEFS` keys are also catalog question ids (`languages_any`,
+ * `certifications_any`, `projects_any`, `skills_add`, `education_details`), so
+ * pressing "No tengo" on one of them is recorded in `skippedQuestionIds` and this
+ * is where that answer is honoured: asking again — round after round — for
+ * certificates someone has just said they do not have is not an improvement
+ * suggestion, it is nagging.
+ */
+function wasDeclined(state: ResumeProfileState, questionId: string): boolean {
+  return state.skippedQuestionIds.includes(questionId);
+}
+
 function detectGaps(state: ResumeProfileState): ImprovementDraft[] {
   const out: ImprovementDraft[] = [];
   for (const [questionId, def] of Object.entries(FOLLOWUP_DEFS)) {
     // Treat thin experience as a stronger trigger for the experience follow-ups.
     const applies = def.applies(state) || (def.section === "experience" && thinExperience(state));
     if (!applies) continue;
+    // "No tengo" in the funnel is an answer, not a blank to be chased.
+    if (wasDeclined(state, questionId)) continue;
     out.push({
       questionId,
       section: def.section,
@@ -444,6 +460,7 @@ export async function analyzeResume(store: Store, ai: AIProvider, profileId: str
     }
     const def = FOLLOWUP_DEFS[imp.questionId];
     if (!def) continue; // ignore questionIds outside the allow-list
+    if (wasDeclined(state, imp.questionId)) continue; // the person already said no
     byId.set(
       key(imp),
       scrubImprovement(

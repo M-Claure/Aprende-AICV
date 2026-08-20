@@ -91,6 +91,12 @@ export const AdaptiveQuestionSchema = z.object({
   options: z.array(z.string().max(120)).max(20).optional(),
   required: z.boolean(),
   allowSkip: z.boolean(),
+  /**
+   * Label for the skip button. "Omitir" is a filing verb; on a question like
+   * "¿Tienes certificados?" the honest answer is "No tengo", and saying so should
+   * not read as abandoning the step. Comes from the catalog, never the model.
+   */
+  skipLabel: z.string().min(1).max(40).optional(),
   /** Max characters for the answer. Comes from the catalog, never the model. */
   charLimit: z.number().int().positive().max(5000),
   contextUsed: z.array(z.string().max(200)).default([]),

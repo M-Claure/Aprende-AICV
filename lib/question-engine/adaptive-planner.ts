@@ -74,6 +74,7 @@ export async function planNextQuestion(
     options: catalog?.options ?? candidate.options,
     required: catalog?.required ?? candidate.required,
     allowSkip: catalog?.allowSkip ?? candidate.allowSkip,
+    skipLabel: catalog?.skipLabel,
     // Same rule as inputType: the limit is the catalog's, never the model's.
     charLimit: answerCharLimitForQuestion(chosenId),
     contextUsed: decision.contextUsed,

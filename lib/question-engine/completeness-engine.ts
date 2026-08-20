@@ -19,6 +19,7 @@ import type {
   SectionStatus,
 } from "@/types";
 import type { ResumeProfileState } from "@/types";
+import { isEducationBlank, isExperienceBlank, isProjectBlank } from "@/lib/entry-blankness";
 
 /** Everything the engine needs — the profile state minus the report itself. */
 export type CompletenessInput = Omit<ResumeProfileState, "completeness">;
@@ -34,10 +35,23 @@ export function computeCompleteness(input: CompletenessInput): CompletenessRepor
   const hasName = nonEmpty(pi.firstName);
   const hasContact = pi.hasEmail || pi.hasPhone;
   const hasObjective = nonEmpty(input.careerGoal) || nonEmpty(input.targetRole);
+  // Counted by CONTENT, not by array length. An entry can exist with nothing in
+  // it (the experience counter opens one per experience counted; "+ Agregar" on the
+  // Review screen opens one directly), and an empty entry is not a background — it
+  // used to satisfy readiness, reach the résumé, and then reach the improvement
+  // loop, which had no name to refer to it by. See `lib/entry-blankness.ts`.
+  const filledExperience = input.experience.filter((e) => !isExperienceBlank(e));
+  const filledEducation = input.education.filter((e) => !isEducationBlank(e));
+  const filledProjects = input.projects.filter((p) => !isProjectBlank(p));
+  const blankEntryCount =
+    input.experience.length -
+    filledExperience.length +
+    (input.education.length - filledEducation.length) +
+    (input.projects.length - filledProjects.length);
   const hasMeaningfulBackground =
-    input.education.length > 0 ||
-    input.experience.length > 0 ||
-    input.projects.length > 0 ||
+    filledEducation.length > 0 ||
+    filledExperience.length > 0 ||
+    filledProjects.length > 0 ||
     input.achievements.length > 0;
   const confirmedSkillCount = input.confirmedSkills.length;
   const hasConfirmedSkill = confirmedSkillCount > 0;
@@ -78,6 +92,17 @@ export function computeCompleteness(input: CompletenessInput): CompletenessRepor
     );
   if (!hasConfirmedSkill)
     missingCriticalFields.push(mf("skills", "confirmedSkill", "Al menos una habilidad confirmada"));
+  // A blank entry must be filled in or deleted — never carried into a résumé.
+  if (blankEntryCount > 0)
+    missingCriticalFields.push(
+      mf(
+        "experience",
+        "blankEntries",
+        blankEntryCount === 1
+          ? "Llena o borra la tarjeta que quedó vacía"
+          : `Llena o borra las ${blankEntryCount} tarjetas que quedaron vacías`,
+      ),
+    );
 
   const missingHelpfulFields = collectHelpful(input, {
     hasContact,
@@ -101,7 +126,12 @@ export function computeCompleteness(input: CompletenessInput): CompletenessRepor
   const weakSections = sections.filter((s) => s.status === "partial").map((s) => s.section);
 
   const readyToGenerate =
-    hasName && hasContact && hasObjective && hasMeaningfulBackground && hasConfirmedSkill;
+    hasName &&
+    hasContact &&
+    hasObjective &&
+    hasMeaningfulBackground &&
+    hasConfirmedSkill &&
+    blankEntryCount === 0;
 
   const readiness = deriveReadiness({
     hasMeaningfulBackground,

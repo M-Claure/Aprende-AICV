@@ -265,8 +265,13 @@ from it:
 - **Editing one entry rewrites its array.** `SupabaseStore` does that
   read-modify-write under an optimistic `revision` guard and retries a lost race.
   Never bypass it with a raw update — a concurrent edit would be lost.
-- **Entry lookups by id use JSONB containment** (`.contains(column, [{id}])`),
-  backed by the GIN indexes the migration creates.
+- **Entry lookups by id use JSONB containment**, backed by the GIN indexes the
+  migration creates — and the filter value must be a **pre-serialized JSON
+  string**: `.contains(column, JSON.stringify([{ id }]))`. Passing the array
+  itself encodes as a Postgres *array* literal (`postgrest-js` does
+  `value.join(',')`), which sends `cs.{[object Object]}` and fails every call with
+  "invalid input syntax for type json". Both stores are exercised by unit tests on
+  `MemoryStore`, so only `tests/unit/supabase-entry-lookup.test.ts` guards this.
 - **Postgres no longer validates entry shape.** There are no per-entry FKs or CHECKs
   inside the JSONB; TypeScript and the Zod schemas at the AI boundary are the
   enforcement. The invariants that matter were always in code (`lib/skills/`,

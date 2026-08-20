@@ -26,6 +26,14 @@ export interface CatalogQuestion {
   required: boolean;
   allowSkip: boolean;
   /**
+   * Wording for the skip button when "Omitir" is not what the person means.
+   * "No tengo" answers the question instead of dodging it, which is what someone
+   * without certificates, languages or projects is actually doing — and it makes
+   * the choice explicit enough that the improvement loop can stop asking (see
+   * `detectGaps` in `lib/resume/resume-analyzer.ts`). Defaults to "Omitir".
+   */
+  skipLabel?: string;
+  /**
    * Maximum characters this answer may contain. REQUIRED, so adding a question
    * forces a deliberate decision about its length rather than inheriting a
    * blanket default — a name and an experience description need very different
@@ -164,6 +172,7 @@ export const QUESTION_CATALOG: CatalogQuestion[] = [
     inputType: "long_text",
     required: false,
     allowSkip: true,
+    skipLabel: "No sé todavía",
     charLimit: 300, // narrativo; tope de updates.careerGoal en el esquema de IA
     precondition: (s) => !hasObjective(s),
     completionEffect: ["careerGoal"],
@@ -209,6 +218,7 @@ export const QUESTION_CATALOG: CatalogQuestion[] = [
     inputType: "short_text",
     required: false,
     allowSkip: true,
+    skipLabel: "Prefiero no decir",
     charLimit: 80, // "Houston, Texas, Estados Unidos" (30)
     precondition: (s) => hasName(s) && !hasLocation(s),
     completionEffect: ["city", "country"],
@@ -233,6 +243,7 @@ export const QUESTION_CATALOG: CatalogQuestion[] = [
     inputType: "long_text",
     required: false,
     allowSkip: true,
+    skipLabel: "No estudié",
     charLimit: 200, // el nivel, con espacio para explicarlo con sus palabras
     precondition: (s) => s.education.length === 0,
     completionEffect: ["education"],
@@ -388,6 +399,7 @@ export const QUESTION_CATALOG: CatalogQuestion[] = [
     inputType: "long_text",
     required: false,
     allowSkip: true,
+    skipLabel: "No tengo más",
     charLimit: 300, // varias habilidades separadas por comas
     // Asked at most once — the answer accepts a comma-separated list, so there's
     // no need to repeat it (repeating caused a loop with the LLM planner).
@@ -405,6 +417,7 @@ export const QUESTION_CATALOG: CatalogQuestion[] = [
     inputType: "long_text",
     required: false,
     allowSkip: true,
+    skipLabel: "No tengo",
     charLimit: 400, // varios certificados con emisor y año
     precondition: (s) => s.certifications.length === 0 && hasBackground(s),
     completionEffect: ["certifications"],
@@ -418,6 +431,7 @@ export const QUESTION_CATALOG: CatalogQuestion[] = [
     inputType: "long_text",
     required: false,
     allowSkip: true,
+    skipLabel: "No tengo",
     charLimit: 200, // "Español nativo, inglés intermedio" (33)
     precondition: (s) => s.languages.length === 0 && hasBackground(s),
     completionEffect: ["languages"],
@@ -431,6 +445,7 @@ export const QUESTION_CATALOG: CatalogQuestion[] = [
     inputType: "long_text",
     required: false,
     allowSkip: true,
+    skipLabel: "No tengo",
     charLimit: 500, // descripción de un proyecto
     precondition: (s) => s.projects.length === 0 && hasBackground(s),
     completionEffect: ["projects"],
@@ -444,6 +459,7 @@ export const QUESTION_CATALOG: CatalogQuestion[] = [
     inputType: "long_text",
     required: false,
     allowSkip: true,
+    skipLabel: "No tengo",
     charLimit: 400, // un logro o reconocimiento
     precondition: (s) => s.achievements.length === 0 && hasBackground(s),
     completionEffect: ["achievements"],

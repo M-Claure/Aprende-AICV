@@ -21,6 +21,7 @@ import {
   MAX_EXPERIENCE_ENTRIES,
   MAX_RESUME_ITERATIONS,
 } from "@/lib/config/limits";
+import { isEducationBlank, isExperienceBlank } from "@/lib/entry-blankness";
 import {
   MONTH_OPTIONS,
   formatExperienceDate,
@@ -136,7 +137,10 @@ export function EditableReview({
             ? `Puedes tener ${MAX_EDUCATION_ENTRIES} estudios. Es el máximo. Borra uno si quieres agregar otro.`
             : undefined
         }
-        onAdd={() => withSave(() => api.addEducation(profileId, { credential: "Nueva formación" }))}
+        // Deliberately EMPTY, not a "Nueva formación" placeholder: a placeholder
+        // reads as filled in — to the résumé generator too — while an empty card is
+        // flagged red and blocks generating until it is filled or deleted.
+        onAdd={() => withSave(() => api.addEducation(profileId, {}))}
       >
         {state.education.length === 0 && <Empty />}
         {state.education.map((e) => (
@@ -144,6 +148,7 @@ export function EditableReview({
             key={e.id}
             entry={e}
             disabled={saving}
+            blank={isEducationBlank(e)}
             onSave={(body) => withSave(() => api.updateEducation(e.id, body))}
             onDelete={() => withSave(() => api.deleteEducation(e.id))}
           />
@@ -159,9 +164,9 @@ export function EditableReview({
             ? `Puedes tener ${MAX_EXPERIENCE_ENTRIES} experiencias. Es el máximo. Borra una si quieres agregar otra.`
             : undefined
         }
-        onAdd={() =>
-          withSave(() => api.addExperience(profileId, { experienceType: "other", rawDescription: "Nueva experiencia" }))
-        }
+        // Empty, for the same reason as education above: "Nueva experiencia" would
+        // travel into the résumé as if the person had written it.
+        onAdd={() => withSave(() => api.addExperience(profileId, { experienceType: "other" }))}
       >
         {state.experience.length === 0 && <Empty />}
         {state.experience.map((e) => (
@@ -169,6 +174,7 @@ export function EditableReview({
             key={e.id}
             entry={e}
             disabled={saving}
+            blank={isExperienceBlank(e)}
             onSave={(body) => withSave(() => api.updateExperience(e.id, body))}
             onDelete={() => withSave(() => api.deleteExperience(e.id))}
           />
@@ -273,10 +279,29 @@ function Empty() {
   return <p className="text-xs text-text-secondary">Aún no hay entradas.</p>;
 }
 
-function Labeled({ label, children }: { label: string; children: React.ReactNode }) {
+function Labeled({
+  label,
+  required,
+  children,
+}: {
+  label: string;
+  /** Renders the red asterisk. Use it only where the field really blocks generating. */
+  required?: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <label className="block">
-      <span className="mb-1 block text-xs text-text-secondary">{label}</span>
+      <span className="mb-1 block text-xs text-text-secondary">
+        {label}
+        {required && (
+          <>
+            <span className="font-bold text-red-600" aria-hidden>
+              {" *"}
+            </span>
+            <span className="sr-only"> (obligatorio)</span>
+          </>
+        )}
+      </span>
       {children}
     </label>
   );
@@ -322,21 +347,37 @@ function CountedInput({
   value,
   limit,
   onChange,
+  required,
+  missing,
 }: {
   label: string;
   value: string;
   limit: number;
   onChange: (v: string) => void;
+  /** Show the red asterisk: this field is one of the five that gate generating. */
+  required?: boolean;
+  /**
+   * Show the unfilled state. Separate from `required` on purpose: "correo o
+   * teléfono" is two asterisked fields where filling EITHER is enough, so the red
+   * outline may only appear when both are empty. Marking each one red as soon as it
+   * is empty would be telling the person something untrue.
+   */
+  missing?: boolean;
 }) {
   const over = value.length > limit;
+  const flagged = over || missing;
   return (
-    <Labeled label={label}>
+    <Labeled label={label} required={required}>
       <input
-        className={over ? `${inputClass} border-red-500 focus:border-red-500` : inputClass}
-        aria-invalid={over}
+        className={flagged ? `${inputClass} border-red-500 focus:border-red-500` : inputClass}
+        aria-invalid={flagged}
+        aria-required={required}
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />
+      {missing && !over && (
+        <span className="mt-0.5 block text-[11px] font-semibold text-red-600">Falta llenar esto.</span>
+      )}
       <CharCount used={value.length} limit={limit} />
     </Labeled>
   );
@@ -466,6 +507,9 @@ function ObjectiveEditor({
           value={targetRole}
           limit={TARGET_ROLE_CHAR_LIMIT}
           onChange={setTargetRole}
+          required
+          // Either field satisfies "objetivo", so this only turns red when both are empty.
+          missing={targetRole.trim() === "" && careerGoal.trim() === ""}
         />
         <CountedTextarea
           label="Objetivo (opcional)"
@@ -503,14 +547,38 @@ function PersonalEditor({
     country: info?.country ?? "",
   });
   const set = (k: keyof typeof v) => (value: string) => setV({ ...v, [k]: value });
+  const noContact = v.email.trim() === "" && v.phone.trim() === "";
   return (
     <Card>
       <h3 className="mb-2 text-sm font-semibold">Información personal</h3>
       <div className="grid grid-cols-2 gap-2">
-        <CountedInput label="Nombre" value={v.firstName} limit={LIMITS.firstName} onChange={set("firstName")} />
+        <CountedInput
+          label="Nombre"
+          value={v.firstName}
+          limit={LIMITS.firstName}
+          onChange={set("firstName")}
+          required
+          missing={v.firstName.trim() === ""}
+        />
         <CountedInput label="Apellidos" value={v.lastName} limit={LIMITS.lastName} onChange={set("lastName")} />
-        <CountedInput label="Correo" value={v.email} limit={LIMITS.email} onChange={set("email")} />
-        <CountedInput label="Teléfono" value={v.phone} limit={LIMITS.phone} onChange={set("phone")} />
+        {/* One contact channel is enough, so both carry the asterisk and neither
+            turns red until both are empty. */}
+        <CountedInput
+          label="Correo"
+          value={v.email}
+          limit={LIMITS.email}
+          onChange={set("email")}
+          required
+          missing={noContact}
+        />
+        <CountedInput
+          label="Teléfono"
+          value={v.phone}
+          limit={LIMITS.phone}
+          onChange={set("phone")}
+          required
+          missing={noContact}
+        />
         <CountedInput label="Ciudad" value={v.city} limit={LIMITS.city} onChange={set("city")} />
         <CountedInput label="País" value={v.country} limit={LIMITS.country} onChange={set("country")} />
       </div>
@@ -538,11 +606,15 @@ function EducationCard({
   onSave,
   onDelete,
   disabled,
+  blank,
 }: {
   entry: EducationEntryState;
   onSave: (b: Record<string, unknown>) => void;
   onDelete: () => void;
   disabled: boolean;
+  /** Nothing typed yet: outlined in red, and generating is blocked until it is
+   *  filled in or deleted. See `lib/entry-blankness.ts`. */
+  blank?: boolean;
 }) {
   const [v, setV] = useState({
     institution: entry.institution ?? "",
@@ -552,10 +624,19 @@ function EducationCard({
   });
   const set = (k: keyof typeof v) => (value: string) => setV({ ...v, [k]: value });
   return (
-    <div className="rounded-lg border border-border p-3">
+    <div className={blank ? blankCardClass : "rounded-lg border border-border p-3"}>
+      {blank && <BlankCardNotice thing="estudio" />}
       <div className="grid grid-cols-2 gap-2">
         <CountedInput label="Institución" value={v.institution} limit={LIMITS.institution} onChange={set("institution")} />
-        <CountedInput label="Título / nivel" value={v.credential} limit={LIMITS.credential} onChange={set("credential")} />
+        <CountedInput
+          label="Título / nivel"
+          value={v.credential}
+          limit={LIMITS.credential}
+          onChange={set("credential")}
+          required={blank}
+          // Any of the fields fills the card; this is the one the funnel asks for.
+          missing={blank && v.credential.trim() === "" && v.institution.trim() === ""}
+        />
         <CountedInput label="Área de estudio" value={v.fieldOfStudy} limit={LIMITS.fieldOfStudy} onChange={set("fieldOfStudy")} />
         <CountedInput label="Año de fin" value={v.endDate} limit={LIMITS.date} onChange={set("endDate")} />
       </div>
@@ -574,17 +655,32 @@ function EducationCard({
   );
 }
 
+/** A blank card is outlined in red — it is the thing blocking "Generar". */
+const blankCardClass = "rounded-lg border-2 border-red-500 bg-red-50/40 p-3";
+
+function BlankCardNotice({ thing }: { thing: string }) {
+  return (
+    <p className="mb-2 text-xs font-semibold text-red-600">
+      Esta tarjeta está vacía. Escribe tu {thing} o bórrala para poder crear tu currículum.
+    </p>
+  );
+}
+
 // ── Experience card ──
 function ExperienceCard({
   entry,
   onSave,
   onDelete,
   disabled,
+  blank,
 }: {
   entry: ExperienceEntryState;
   onSave: (b: Record<string, unknown>) => void;
   onDelete: () => void;
   disabled: boolean;
+  /** Nothing typed yet: outlined in red, and generating is blocked until it is
+   *  filled in or deleted. See `lib/entry-blankness.ts`. */
+  blank?: boolean;
 }) {
   const start = parseExperienceDate(entry.startDate);
   const end = parseExperienceDate(entry.endDate);
@@ -604,13 +700,17 @@ function ExperienceCard({
     isCurrent: entry.isCurrent,
   });
   return (
-    <div className="rounded-lg border border-border p-3">
+    <div className={blank ? blankCardClass : "rounded-lg border border-border p-3"}>
+      {blank && <BlankCardNotice thing="experiencia" />}
       <div className="grid grid-cols-2 gap-2">
         <CountedInput
           label="Puesto / rol"
           value={v.title}
           limit={LIMITS.title}
           onChange={(title) => setV({ ...v, title })}
+          required={blank}
+          // Any field fills the card, so this stays red only while all of them are empty.
+          missing={blank && v.title.trim() === "" && v.organization.trim() === "" && v.rawDescription.trim() === ""}
         />
         <CountedInput
           label="Organización"

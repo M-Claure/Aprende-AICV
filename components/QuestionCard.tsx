@@ -126,7 +126,9 @@ export function QuestionCard({
       <div className="mt-5 flex items-center justify-between">
         {question.allowSkip ? (
           <Button variant="text" onClick={onSkip} disabled={busy}>
-            Omitir
+            {/* "No tengo" where that is the real answer; "Omitir" otherwise. The
+                label is the catalog's, like every other control on this card. */}
+            {question.skipLabel ?? "Omitir"}
           </Button>
         ) : (
           <span />
