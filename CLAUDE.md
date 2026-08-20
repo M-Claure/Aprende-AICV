@@ -97,7 +97,7 @@ the same ceiling.
 | `lib/ai/` | `AIProvider` abstraction, `MockAIProvider`, `AzureOpenAIProvider`, prompts, **Zod schemas** |
 | `lib/skills/` | evidence-backed inference + confirm/reject/edit lifecycle |
 | `lib/services/answer-pipeline.ts` | the spec §9 answer pipeline |
-| `lib/resume/` | generator · HTML renderer · PDF (puppeteer) · **artifact writer** (saves the PDF on every generation) · source tracing · **analyzer** (improvement loop) · **proofreader** (final spelling/grammar/format pass before finalize) |
+| `lib/resume/` | generator · HTML renderer · PDF (two renderers: puppeteer local, `@sparticuz/chromium` serverless) · **artifact writer** (saves the PDF on every generation) · source tracing · **analyzer** (improvement loop) · **proofreader** (final spelling/grammar/format pass before finalize) |
 | `lib/analytics/` | Amplitude (HTTP API) with PII allow-list; no-op when unconfigured |
 | `lib/services/funnel-telemetry.ts` | Records a question as *shown* (event + `QuestionState.lastShownQuestionId`) so funnel exit points are visible — see `docs/funnel-analytics.md` |
 | `lib/repositories/funnel-entities.ts` | entity construction shared by every `Store` impl, so `MemoryStore` and `SupabaseStore` cannot drift on defaults |
@@ -242,6 +242,48 @@ schema side).
 - The render runs **inside the generation lock**, so concurrent requests cannot race
   to overwrite the single stored file with different versions.
 
+## PDF rendering (two browsers, one interface)
+
+`lib/resume/pdf-generator.ts` has two implementations of `PdfGenerator`, chosen by
+runtime — not by `NODE_ENV`:
+
+- **`PuppeteerPdfGenerator`** — full `puppeteer`, which downloads its own Chromium
+  (~300 MB on disk). A **devDependency**: local development, CI, and any
+  self-hosted server with a real filesystem.
+- **`ServerlessPdfGenerator`** — `puppeteer-core` + `@sparticuz/chromium`, a
+  Brotli-compressed Chromium built for Lambda-style runtimes. Vercel.
+
+Why both are necessary: a Vercel function is capped at **250 MB uncompressed** and
+full Chromium alone exceeds it, so that bundle can never contain it. Independently,
+`puppeteer`'s postinstall — the step that fetches Chromium — is an install script,
+and npm now skips those unless approved, so on Vercel the browser was never
+downloaded either. Both failures are **silent**: `ResumeArtifactWriter` is
+best-effort, so generation still looked fine and only the download surfaced it, at
+the very last step of the product.
+
+Rules that follow:
+
+- **`resolvePdfRenderer` keys off the RUNTIME** (`VERCEL`, `AWS_LAMBDA_FUNCTION_VERSION`),
+  overridable with `PDF_RENDERER=local|serverless`. `NODE_ENV=production` is not the
+  signal — a container in production should use the full browser.
+- **The two Chromium majors must match their client.** `puppeteer-core` and
+  `@sparticuz/chromium` are both pinned to **148**; a protocol mismatch fails at
+  render time, not at build time. Bump them together.
+- **Launch flags come from `@sparticuz/chromium`, per its own version's README.**
+  148 removed `chromium.headless` and `chromium.defaultViewport`, so the
+  headless-**shell** flags are merged via `puppeteer.defaultArgs({ args, headless:
+  "shell" })`. Check the installed README before changing this.
+- **`@sparticuz/chromium` must stay in `serverComponentsExternalPackages`**
+  (`next.config.mjs`) so its `bin/*.br` archives are traced as files instead of
+  bundled. The traced `export-pdf` function is ~86 MB with it.
+- **Every route that can render a PDF sets `maxDuration = 60` and `runtime =
+  "nodejs"`** — generate, regenerate-section, proofread, export-pdf. A Chromium
+  cold start plus a model call exceeds Vercel's 10s default.
+- The serverless path **cannot be launch-tested off Linux**, so
+  `tests/unit/pdf-renderer-selection.test.ts` pins the selection logic and asserts
+  both packages resolve with the API the launch code uses. That is the guard against
+  a deploy-only break.
+
 ## Database schema (5 tables)
 
 ```
@@ -336,7 +378,7 @@ a runtime connectivity guard (`lib/connectivity.ts`, wired into `middleware.ts`)
 returns **503** on every request when the host has no network. You must set
 `AI_PROVIDER=azure` (+ `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_BASE_URL`) and
 `PERSISTENCE=supabase` (+ Supabase URL/keys) — see `.env.example`. PDF export
-requires `puppeteer` (installed). Note: this intentionally breaks the **e2e** suite,
+requires a browser — see **PDF rendering** above. Note: this intentionally breaks the **e2e** suite,
 which boots the app with `AI_PROVIDER=mock` + `PERSISTENCE=memory` (see
 `playwright.config.ts`) — flip `ONLINE_ONLY` to `false` to run it. The **unit** suite
 is unaffected: it injects `MockAIProvider`/`MemoryStore` directly and never parses the
@@ -347,7 +389,7 @@ environment, so `vitest run` passes as-is.
 All via environment variables; never commit secrets. See `.env.example`.
 `AI_PROVIDER`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_BASE_URL`, `AZURE_OPENAI_MODEL`,
 `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
-`SUPABASE_SERVICE_ROLE_KEY`, `AMPLITUDE_API_KEY`, `PERSISTENCE`,
+`SUPABASE_SERVICE_ROLE_KEY`, `AMPLITUDE_API_KEY`, `PERSISTENCE`, `PDF_RENDERER`,
 `DEFAULT_BRAND`, `BRAND_HOST_OVERRIDES`.
 
 ## Out of scope (do not add in milestone 1)

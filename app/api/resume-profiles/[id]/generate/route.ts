@@ -5,6 +5,12 @@ import { MAX_RESUME_ITERATIONS } from "@/lib/config/limits";
 import { Errors } from "@/lib/errors";
 
 export const dynamic = "force-dynamic";
+// Chromium cold start + render, on top of the model call, comfortably exceeds
+// Vercel's 10s default. 60s is the Hobby ceiling and is plenty for one résumé.
+export const maxDuration = 60;
+// This route renders the PDF too (via `resumeArtifacts`), so it needs the
+// Node.js runtime and its filesystem — never Edge.
+export const runtime = "nodejs";
 
 /**
  * POST /api/resume-profiles/:id/generate

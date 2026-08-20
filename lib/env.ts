@@ -59,6 +59,17 @@ const EnvSchema = z
     PERSISTENCE: z.enum(["supabase", "memory"]).default("memory"),
 
     /**
+     * Which PDF renderer to use — see `lib/resume/pdf-generator.ts`.
+     *   auto        (default) serverless on Vercel/Lambda, full puppeteer elsewhere
+     *   local       full `puppeteer` (devDependency; needs its ~300 MB Chromium)
+     *   serverless  `puppeteer-core` + `@sparticuz/chromium`
+     * Declared here so a typo fails at startup instead of at the first render,
+     * which is the one place a PDF failure is hard to notice (the artifact writer
+     * is best-effort and swallows it).
+     */
+    PDF_RENDERER: z.enum(["auto", "local", "serverless"]).default("auto"),
+
+    /**
      * Marketing brand served when the request host matches no brand's `hosts` —
      * preview deploys (`*.vercel.app`), `localhost`, and single-brand hosting.
      * Leave unset to fall back to `FALLBACK_BRAND_ID`.

@@ -6,6 +6,9 @@ import { generateResume } from "@/lib/resume/resume-generator";
 import { getPdfGenerator } from "@/lib/resume/pdf-generator";
 
 export const dynamic = "force-dynamic";
+// Chromium cold start + render, on top of the model call, comfortably exceeds
+// Vercel's 10s default. 60s is the Hobby ceiling and is plenty for one résumé.
+export const maxDuration = 60;
 // PDF rendering (Chromium) needs the Node.js runtime, not Edge.
 export const runtime = "nodejs";
 
