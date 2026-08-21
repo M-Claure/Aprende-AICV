@@ -4,8 +4,6 @@ import { useCallback, useEffect, useState } from "react";
 import type { AdaptiveQuestion } from "@/lib/ai/schemas";
 import type { ResumeProfileState } from "@/types";
 import { api, type AnswerPayload } from "@/lib/client/api";
-import { answerCharLimitForQuestion } from "@/lib/answer-limits";
-import { MAX_EXPERIENCE_ENTRIES } from "@/lib/config/limits";
 import { InstructionBanner, ProgressBar, Spinner } from "@/components/primitives";
 import { QuestionCard } from "@/components/QuestionCard";
 import { SkillConfirm } from "@/components/SkillConfirm";
@@ -15,30 +13,21 @@ import { stepInstruction } from "@/components/instructions";
 
 type Phase = "loading" | "asking" | "generating" | "done" | "error";
 
-/**
- * A fresh "add another experience" question (client-initiated, creates a new entry).
+/*
+ * There is NO client-initiated "add another experience" here on purpose.
  *
- * Deliberately TYPE-LESS, unlike the catalog's describe question, which names the
- * position and type the person counted ("Experiencia 2 de 3: tu voluntariado").
- * Nobody chose a type for this one, so the wording stays broad and the entry is
- * stored as `other` until the description tells us what it was.
+ * The funnel used to end every step with a "➕ Agregar otra experiencia" button that
+ * pushed a question of its own making and answered it with `forceNewEntry`. It sat
+ * outside the question flow, so it appeared under unrelated questions and gave the
+ * person a second, competing way to add experience alongside the counter step and the
+ * Review screen's "+ Agregar".
+ *
+ * Extra experiences now come from where they are asked for: the catalog's own
+ * `experience_add` question (`lib/question-engine/question-catalog.ts`), which repeats
+ * while entries are undescribed, and the Review screen. The server still accepts
+ * `forceNewEntry` — it is what keeps a genuinely additional answer from being absorbed
+ * by an undescribed entry — it simply has no client caller now.
  */
-const NEW_EXPERIENCE_QUESTION: AdaptiveQuestion = {
-  questionId: "experience_add",
-  section: "experience",
-  questionText: "Cuéntame sobre otra experiencia. ¿De qué se trataba y qué hacías?",
-  supportingText: "Trabajo, negocio, voluntariado, cuidado de personas, proyecto… todo cuenta.",
-  inputType: "long_text",
-  required: false,
-  // Matches the catalog: no experience question offers "Omitir". Reaching this one
-  // is an explicit choice ("Agregar otra experiencia"), and "← Volver" undoes it.
-  allowSkip: false,
-  // Same limit the server will enforce for this questionId.
-  charLimit: answerCharLimitForQuestion("experience_add"),
-  contextUsed: [],
-  suggestedSkills: [],
-  nextAction: "ask_question",
-};
 
 /**
  * Coarse device bucket for funnel analysis (are students dropping off on
@@ -129,15 +118,6 @@ export default function CvFlowPage({ params }: { params: { id: string } }) {
     });
   }, []);
 
-  // Explicitly add another experience (create a new entry rather than overwrite).
-  const addAnotherExperience = useCallback(() => {
-    setHistory((h) => (question ? [...h, { question, affectedEntryId: null }] : h));
-    setQuestion(NEW_EXPERIENCE_QUESTION);
-    setTargetEntryId(undefined);
-    setInterpretation(null);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [question]);
-
   const send = useCallback(
     async (payload: Omit<AnswerPayload, "questionId" | "section">) => {
       if (!question) return;
@@ -150,12 +130,6 @@ export default function CvFlowPage({ params }: { params: { id: string } }) {
           timeSpentMs: startedAt ? Date.now() - startedAt : undefined,
           deviceCategory: deviceCategory(),
           targetEntryId,
-          // This exact object is only ever set by "Agregar otra experiencia", so
-          // identity tells the server the answer is an ADDITIONAL experience and
-          // must not be absorbed by an entry from the counter step that is still
-          // waiting to be described. A back-edit still wins: the server prefers
-          // `targetEntryId` when both arrive.
-          forceNewEntry: question === NEW_EXPERIENCE_QUESTION || undefined,
           ...payload,
         });
         applyResult(res);
@@ -290,21 +264,6 @@ export default function CvFlowPage({ params }: { params: { id: string } }) {
         ))}
       </div>
 
-      {/* Hidden at the cap: the server would create nothing, so offering it would
-          be a button that silently does nothing. */}
-      {question &&
-        question.inputType !== "review" &&
-        (state?.experience.length ?? 0) > 0 &&
-        (state?.experience.length ?? 0) < MAX_EXPERIENCE_ENTRIES && (
-          <button
-            type="button"
-            onClick={addAnotherExperience}
-            disabled={busy}
-            className="self-start text-sm font-medium text-accent-dark hover:underline disabled:opacity-50"
-          >
-            ➕ Agregar otra experiencia
-          </button>
-        )}
     </Shell>
   );
 }
