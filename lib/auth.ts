@@ -79,6 +79,37 @@ export async function resolveUserId(): Promise<string | null> {
 }
 
 /**
+ * The user id for this request **without creating one**: the session's user, or
+ * `null` when this visitor has never been here.
+ *
+ * This is the read `resolveUserId` cannot do, because minting is a side effect and
+ * some questions are asked on every pageview. The landing page asks "do you already
+ * have a résumé?" — on the minting path that would provision an `auth.users` row for
+ * every anonymous visitor, before they accept the privacy notice and before we have
+ * any way to reach them. `POST /api/resume-profiles` is careful not to write until
+ * both are true; a lookup must not undo that.
+ *
+ * The dev/test modes have no real session to inspect, so they answer with the same
+ * id `resolveUserId` would. That is harmless: an empty store then correctly reports
+ * that there is nothing to continue.
+ */
+export async function resolveExistingUserId(): Promise<string | null> {
+  const env = getEnv();
+
+  if (env.E2E_AUTH_BYPASS) {
+    return cookies().get("mcv_uid")?.value ?? "e2e-user";
+  }
+
+  if (env.PERSISTENCE === "supabase") {
+    const supabase = getSupabaseServerClient();
+    const { data } = await supabase.auth.getUser();
+    return data.user?.id ?? null;
+  }
+
+  return cookies().get("mcv_uid")?.value ?? "dev-user";
+}
+
+/**
  * Create the visitor's session. Called from route handlers only (via
  * `getRequestContext`), which is what makes the cookie write stick — a Server
  * Component cannot set cookies, and a session that is not persisted would mint a

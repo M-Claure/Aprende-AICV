@@ -67,11 +67,34 @@ export default function CvFlowPage({ params }: { params: { id: string } }) {
     if (fatal) setPhase("error");
   }, []);
 
-  // Load the first question.
+  /*
+   * Open at the step this profile is actually on.
+   *
+   * What the profile IS gets asked before what to ask next, because a résumé that
+   * already exists must reopen in the WORKSPACE. This page used to always plan a
+   * question, so re-entering a generated profile — a refresh, or now the landing
+   * page's "Seguir con mi currículum" — landed on the review screen, whose button
+   * reads "Generar mi currículum". Pressing it spends a paid generation AND one of
+   * the three improvement rounds to rebuild a résumé the person already had.
+   *
+   * `generating` deliberately falls through to the funnel: a generation that died
+   * mid-flight leaves that status behind with no résumé, and the review screen is
+   * where it can be tried again.
+   *
+   * The cost is one extra read before the first question, on mount only. Planning
+   * the question first instead would be cheaper but records it as SHOWN
+   * (`funnel-telemetry`), inflating the exit rate of a question nobody ever saw.
+   */
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
+        const { profile } = await api.getProfile(profileId);
+        if (cancelled) return;
+        if (profile.status === "generated") {
+          setPhase("done");
+          return;
+        }
         const res = await api.nextQuestion(profileId);
         if (cancelled) return;
         setQuestion(res.nextQuestion);

@@ -97,6 +97,13 @@ export const api = {
       body: JSON.stringify(input),
     }),
 
+  /**
+   * The résumé this browser's session already owns, or `null`. Safe to call for a
+   * first-time visitor: it starts no session and writes nothing.
+   */
+  currentProfile: () =>
+    req<{ profile: ResumeProfile | null }>("/api/resume-profiles/current"),
+
   getProfile: (id: string) =>
     req<{
       profile: ResumeProfile;

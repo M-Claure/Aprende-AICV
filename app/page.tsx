@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/client/api";
 import { Button, InstructionBanner, Spinner } from "@/components/primitives";
+import { ContinueResume } from "@/components/ContinueResume";
 import { CONTACT_FIELD_CHAR_LIMITS } from "@/lib/answer-limits";
 import { isEmail, isPhone } from "@/lib/personal-contact";
 import { useBrand } from "@/lib/brand/context";
@@ -223,11 +224,20 @@ export default function HomePage() {
   // The landing pitch is the app's marketing surface, so it is rendered by the
   // active brand's hero (colours, copy, CTA and layout all come from the brand).
   // Consent state stays here because it gates profile creation, not styling.
+  //
+  // `ContinueResume` sits ABOVE it and renders nothing for a first-time visitor, so
+  // the hero is still the first thing a new arrival sees. For someone who already
+  // has a résumé it is the first thing instead — otherwise pressing the hero's CTA
+  // starts a second one and the first becomes unreachable (the session cookie is
+  // the only handle on it, and nothing else in the UI ever names it again).
   return (
-    <MarketingHeroSlot
-      agreed={agreed}
-      onAgreedChange={setAgreed}
-      onStart={() => setStep("contact")}
-    />
+    <>
+      <ContinueResume onStartNew={() => setStep("contact")} />
+      <MarketingHeroSlot
+        agreed={agreed}
+        onAgreedChange={setAgreed}
+        onStart={() => setStep("contact")}
+      />
+    </>
   );
 }
