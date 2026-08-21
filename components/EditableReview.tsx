@@ -279,29 +279,48 @@ function Empty() {
   return <p className="text-xs text-text-secondary">Aún no hay entradas.</p>;
 }
 
+/**
+ * The field caption, with the red asterisk when the field is required. Shared with
+ * `MonthYearField`, which wraps two selects and so cannot use `Labeled`'s single
+ * <label> — the asterisk must look identical in both.
+ */
+function FieldLabel({ label, required }: { label: string; required?: boolean }) {
+  return (
+    <span className="mb-1 block text-xs text-text-secondary">
+      {label}
+      {required && (
+        <>
+          <span className="font-bold text-red-600" aria-hidden>
+            {" *"}
+          </span>
+          <span className="sr-only"> (obligatorio)</span>
+        </>
+      )}
+    </span>
+  );
+}
+
+/** Red, one-line "you still have to fill this in" note under a required field. */
+function MissingNote({ text = "Falta llenar esto." }: { text?: string }) {
+  return <span className="mt-0.5 block text-[11px] font-semibold text-red-600">{text}</span>;
+}
+
 function Labeled({
   label,
   required,
   children,
 }: {
   label: string;
-  /** Renders the red asterisk. Use it only where the field really blocks generating. */
+  /**
+   * Renders the red asterisk. Use it only where the field really blocks something:
+   * generating (personal info, education) or saving the card (every experience field).
+   */
   required?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-xs text-text-secondary">
-        {label}
-        {required && (
-          <>
-            <span className="font-bold text-red-600" aria-hidden>
-              {" *"}
-            </span>
-            <span className="sr-only"> (obligatorio)</span>
-          </>
-        )}
-      </span>
+      <FieldLabel label={label} required={required} />
       {children}
     </label>
   );
@@ -354,7 +373,7 @@ function CountedInput({
   value: string;
   limit: number;
   onChange: (v: string) => void;
-  /** Show the red asterisk: this field is one of the five that gate generating. */
+  /** Show the red asterisk: this field gates generating, or saving its card. */
   required?: boolean;
   /**
    * Show the unfilled state. Separate from `required` on purpose: "correo o
@@ -375,9 +394,7 @@ function CountedInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />
-      {missing && !over && (
-        <span className="mt-0.5 block text-[11px] font-semibold text-red-600">Falta llenar esto.</span>
-      )}
+      {missing && !over && <MissingNote />}
       <CharCount used={value.length} limit={limit} />
     </Labeled>
   );
@@ -387,21 +404,28 @@ function CountedInput({
  * Month + year dropdowns for one experience date.
  *
  * Dropdowns rather than a text box: nobody has to guess a format, and the value
- * they produce is exactly what the résumé's chronological sort parses. The month is
- * OPTIONAL — plenty of people remember the year but not the month, and a bare year
- * still orders correctly.
+ * they produce is exactly what the résumé's chronological sort parses. The month
+ * stays OPTIONAL even when the field is required — plenty of people remember the
+ * year but not the month, and a bare year still orders correctly — so `missing`
+ * flags the YEAR only, and the asterisk is satisfied by a year alone.
  */
 function MonthYearField({
   label,
   month,
   year,
   disabled = false,
+  required,
+  missing,
   onChange,
 }: {
   label: string;
   month: string;
   year: string;
   disabled?: boolean;
+  /** Show the red asterisk: this date gates saving the card. */
+  required?: boolean;
+  /** No year chosen yet: outline the year select and say what is missing. */
+  missing?: boolean;
   onChange: (month: string, year: string) => void;
 }) {
   const years = yearOptions(new Date().getFullYear());
@@ -409,9 +433,10 @@ function MonthYearField({
   // silently blanking (and being wiped on the next save).
   const options = year && !years.includes(year) ? [year, ...years] : years;
   const selectClass = disabled ? `${inputClass} opacity-50` : inputClass;
+  const yearClass = missing ? `${selectClass} border-red-500 focus:border-red-500` : selectClass;
   return (
     <div>
-      <span className="mb-1 block text-xs text-text-secondary">{label}</span>
+      <FieldLabel label={label} required={required} />
       <div className="flex gap-2">
         <select
           className={selectClass}
@@ -428,9 +453,11 @@ function MonthYearField({
           ))}
         </select>
         <select
-          className={selectClass}
+          className={yearClass}
           value={year}
           disabled={disabled}
+          aria-invalid={missing}
+          aria-required={required}
           aria-label={`${label}: año`}
           onChange={(e) => onChange(month, e.target.value)}
         >
@@ -442,6 +469,7 @@ function MonthYearField({
           ))}
         </select>
       </div>
+      {missing && <MissingNote text="Falta elegir el año." />}
     </div>
   );
 }
@@ -453,6 +481,8 @@ function CountedTextarea({
   rows = 2,
   placeholder,
   onChange,
+  required,
+  missing,
 }: {
   label: string;
   value: string;
@@ -460,18 +490,25 @@ function CountedTextarea({
   rows?: number;
   placeholder?: string;
   onChange: (v: string) => void;
+  /** Show the red asterisk: this field gates saving its card. */
+  required?: boolean;
+  /** Nothing typed yet: outline it and say so. */
+  missing?: boolean;
 }) {
   const over = value.length > limit;
+  const flagged = over || missing;
   return (
-    <Labeled label={label}>
+    <Labeled label={label} required={required}>
       <textarea
-        className={over ? `${inputClass} border-red-500 focus:border-red-500` : inputClass}
-        aria-invalid={over}
+        className={flagged ? `${inputClass} border-red-500 focus:border-red-500` : inputClass}
+        aria-invalid={flagged}
+        aria-required={required}
         rows={rows}
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
       />
+      {missing && !over && <MissingNote />}
       <CharCount used={value.length} limit={limit} />
     </Labeled>
   );
@@ -699,6 +736,30 @@ function ExperienceCard({
     endYear: end.year,
     isCurrent: entry.isCurrent,
   });
+  /*
+   * Every field on this card is required — the asterisks say so, and Guardar stays
+   * blocked until each one is filled. Two deliberate exceptions:
+   *
+   *  - the end date is not asked for when "Sigo en esta experiencia" is checked, since
+   *    that checkbox IS the answer (and checking it clears the date);
+   *  - a date needs only its YEAR, not the month (see `MonthYearField`).
+   *
+   * This gates SAVING THIS CARD only. Whether the résumé can be generated is still the
+   * completeness engine's call (`readyToGenerate`), which is server-side and unchanged.
+   */
+  const missing = {
+    title: v.title.trim() === "",
+    organization: v.organization.trim() === "",
+    startDate: v.startYear.trim() === "",
+    endDate: !v.isCurrent && v.endYear.trim() === "",
+    rawDescription: v.rawDescription.trim() === "",
+  };
+  const incomplete = Object.values(missing).some(Boolean);
+  const tooLong = overAny(
+    [v.title, LIMITS.title],
+    [v.organization, LIMITS.organization],
+    [v.rawDescription, ENTRY_TEXT_CHAR_LIMIT],
+  );
   return (
     <div className={blank ? blankCardClass : "rounded-lg border border-border p-3"}>
       {blank && <BlankCardNotice thing="experiencia" />}
@@ -708,15 +769,16 @@ function ExperienceCard({
           value={v.title}
           limit={LIMITS.title}
           onChange={(title) => setV({ ...v, title })}
-          required={blank}
-          // Any field fills the card, so this stays red only while all of them are empty.
-          missing={blank && v.title.trim() === "" && v.organization.trim() === "" && v.rawDescription.trim() === ""}
+          required
+          missing={missing.title}
         />
         <CountedInput
           label="Organización"
           value={v.organization}
           limit={LIMITS.organization}
           onChange={(organization) => setV({ ...v, organization })}
+          required
+          missing={missing.organization}
         />
       </div>
       <div className="mt-2 grid grid-cols-2 gap-2">
@@ -724,6 +786,8 @@ function ExperienceCard({
           label="Empezó en"
           month={v.startMonth}
           year={v.startYear}
+          required
+          missing={missing.startDate}
           onChange={(startMonth, startYear) => setV({ ...v, startMonth, startYear })}
         />
         <MonthYearField
@@ -731,6 +795,8 @@ function ExperienceCard({
           month={v.endMonth}
           year={v.endYear}
           disabled={v.isCurrent}
+          required={!v.isCurrent}
+          missing={missing.endDate}
           onChange={(endMonth, endYear) => setV({ ...v, endMonth, endYear })}
         />
       </div>
@@ -751,7 +817,9 @@ function ExperienceCard({
         Sigo en esta experiencia
       </label>
       <div className="mt-2">
-        <Labeled label="Tipo de experiencia">
+        {/* Required too, but a select always holds a value (an entry created from
+            "+ Agregar" starts on "other"), so the asterisk can never be unmet. */}
+        <Labeled label="Tipo de experiencia" required>
           <select
             className={inputClass}
             value={v.experienceType}
@@ -779,15 +847,17 @@ function ExperienceCard({
           limit={ENTRY_TEXT_CHAR_LIMIT}
           rows={3}
           onChange={(rawDescription) => setV({ ...v, rawDescription })}
+          required
+          missing={missing.rawDescription}
         />
       </div>
       <SaveRow
         disabled={disabled}
-        blocked={overAny(
-          [v.title, LIMITS.title],
-          [v.organization, LIMITS.organization],
-          [v.rawDescription, ENTRY_TEXT_CHAR_LIMIT],
-        )}
+        blocked={tooLong || incomplete}
+        blockedMessage={
+          // Length wins the message: it is the one that needs an edit, not a fill-in.
+          tooLong ? undefined : "Llena todo lo que tiene * para poder guardar."
+        }
         onSave={() =>
           // Send exactly the fields the API takes: the month/year pairs are UI
           // state and get folded back into the stored free-text dates here.
@@ -946,18 +1016,24 @@ function SaveRow({
   onDelete,
   disabled,
   blocked = false,
+  blockedMessage,
 }: {
   onSave: () => void;
   onDelete?: () => void;
   disabled: boolean;
-  /** Some field is over its limit: block saving instead of letting the API 422. */
+  /**
+   * Saving cannot go through: a field is over its limit (letting the API 422 instead
+   * would be worse), or a required field is still empty.
+   */
   blocked?: boolean;
+  /** Why, in Spanish. Defaults to the over-the-limit case. */
+  blockedMessage?: string;
 }) {
   return (
     <div className="mt-2 flex flex-wrap items-center justify-end gap-3">
       {blocked && (
         <span className="mr-auto text-xs font-semibold text-red-600">
-          Acorta lo que está marcado en rojo para poder guardar.
+          {blockedMessage ?? "Acorta lo que está marcado en rojo para poder guardar."}
         </span>
       )}
       {onDelete && (
