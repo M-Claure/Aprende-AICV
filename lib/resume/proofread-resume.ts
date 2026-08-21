@@ -94,6 +94,9 @@ export async function proofreadAndRerender(
   const html = renderResumeHtml(renderModel);
 
   const saved = await store.createGeneratedResume(profileId, {
+    // A proofread is a re-render of the round already on file, not a new round:
+    // it must overwrite that round's PDF rather than claim the next one.
+    stage: resume.stage,
     professionalSummary,
     skills: resume.skills,
     experience,
@@ -104,7 +107,7 @@ export async function proofreadAndRerender(
     html,
   });
 
-  // Proofreading writes a new version, so the saved PDF has to follow it.
+  // Proofreading writes a new version, so the round's saved PDF has to follow it.
   const stored = artifacts ? await artifacts.onResumeCreated(saved) : saved;
 
   return { resume: stored, notes };

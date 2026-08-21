@@ -76,6 +76,10 @@ export class MemoryStore implements Store {
   private achievements = new Map<string, Achievement>();
   private turns = new Map<string, ConversationTurn>();
   private questionStates = new Map<string, QuestionState>();
+  /**
+   * Keyed by PROFILE, not by résumé id: a profile holds exactly one generated
+   * résumé, mirroring the `funnel.resume_*` columns the Supabase store writes.
+   */
   private resumes = new Map<string, GeneratedResume>();
   private iterations = new Map<string, number>();
   private iterationAnswers = new Map<string, IterationAnswer>();
@@ -368,31 +372,33 @@ export class MemoryStore implements Store {
   }
 
   // ── Generated resumes ──
+  // One per profile, replaced on every generation — the `funnel.resume_*` columns.
   async createGeneratedResume(
     profileId: string,
     input: CreateGeneratedResumeInput,
   ): Promise<GeneratedResume> {
-    const existing = this.byProfile(this.resumes, profileId);
-    const version = existing.reduce((max, r) => Math.max(max, r.version), 0) + 1;
-    const resume = buildGeneratedResume(profileId, input, version);
-    this.resumes.set(resume.id, resume);
+    const previous = this.resumes.get(profileId);
+    const resume = buildGeneratedResume(profileId, input, (previous?.version ?? 0) + 1);
+    this.resumes.set(profileId, resume);
     return clone(resume);
   }
   async getGeneratedResume(id: string): Promise<GeneratedResume | null> {
-    return clone(this.resumes.get(id) ?? null);
+    const found = [...this.resumes.values()].find((r) => r.id === id);
+    return clone(found ?? null);
   }
   async getLatestGeneratedResume(profileId: string): Promise<GeneratedResume | null> {
-    const all = this.byProfile(this.resumes, profileId).sort((a, b) => b.version - a.version);
-    return all[0] ?? null;
+    return clone(this.resumes.get(profileId) ?? null);
   }
   async updateGeneratedResume(
     id: string,
     patch: Partial<Pick<GeneratedResume, "pdfPath" | "html">>,
   ): Promise<GeneratedResume> {
-    const existing = this.resumes.get(id);
+    const existing = [...this.resumes.values()].find((r) => r.id === id);
+    // Superseded by a newer generation, so there is nothing to patch — see the
+    // `Store` contract.
     if (!existing) throw Errors.notFound("Currículum generado no encontrado");
     const updated = { ...existing, ...stripUndefined(patch) };
-    this.resumes.set(id, updated);
+    this.resumes.set(existing.resumeProfileId, updated);
     return clone(updated);
   }
 
@@ -417,6 +423,7 @@ export class MemoryStore implements Store {
       questionId: input.questionId,
       question: input.question,
       answer: input.answer ?? null,
+      resumePdfPath: null,
       createdAt: now(),
     };
     this.iterationAnswers.set(entry.id, entry);
@@ -427,6 +434,17 @@ export class MemoryStore implements Store {
       .filter((a) => a.resumeProfileId === profileId && a.iteration === iteration)
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
       .map(clone);
+  }
+  async setIterationResumePdf(
+    profileId: string,
+    iteration: number,
+    pdfPath: string,
+  ): Promise<void> {
+    for (const [id, a] of this.iterationAnswers) {
+      if (a.resumeProfileId === profileId && a.iteration === iteration) {
+        this.iterationAnswers.set(id, { ...a, resumePdfPath: pdfPath });
+      }
+    }
   }
 }
 

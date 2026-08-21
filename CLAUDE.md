@@ -91,7 +91,7 @@ the same ceiling.
 | `lib/brand/` | multi-brand system: configs · registry · pure host resolution · `:root` theme emitter · server/client accessors |
 | `components/marketing/` | branded surfaces: shared hero + per-brand headers, dispatched via a registry |
 | `lib/repositories/` | `Store` interface + `MemoryStore` (dev/tests) + `SupabaseStore` |
-| `lib/storage/` | `ResumeFileStore` interface + `MemoryResumeFileStore` + Supabase Storage impl — the saved résumé PDF |
+| `lib/storage/` | `ResumeFileStore` interface + `MemoryResumeFileStore` + Supabase Storage impl — one saved résumé PDF per improvement round |
 | `lib/profile-state.ts` | Assembles `ResumeProfileState`, redacts PII, computes completeness |
 | `lib/question-engine/` | completeness · catalog · prioritizer · adaptive planner |
 | `lib/ai/` | `AIProvider` abstraction, `MockAIProvider`, `AzureOpenAIProvider`, prompts, **Zod schemas** |
@@ -216,31 +216,45 @@ CTA and is in the funnel; the identity the database needs is created *for* them.
 
 ## Saved résumé PDFs
 
-Every generation renders a PDF and **replaces** the profile's stored one, so a user
-always has a current file and a download is a storage read rather than a Chromium
-launch (`docs/` → `supabase/migrations/0006_resume_pdf_storage.sql` explains the
-schema side).
+Every generation renders a PDF and **replaces the one stored for its improvement
+round**, so a user always has a current file, a download is a storage read rather
+than a Chromium launch, and the rounds accumulate into a history you can open in
+order to see the résumé improve (`0006_resume_pdf_storage.sql` created the bucket;
+`0008_resume_pdf_per_stage.sql` introduced the per-round layout).
 
-- **One object per profile**, at `<user_id>/<resume_profile_id>/curriculum.pdf` in
-  the private `resumes` bucket, written with `upsert`. Storage cannot grow as a
-  user iterates, and a download can never return a stale version. Older
-  `resume_pdfs` rows are therefore not individually downloadable — there is
-  no version history in the product, and a PDF per version would multiply PII at rest.
+- **One object per round**, in the private `resumes` bucket, written with `upsert`:
+  `<user_id>/<resume_profile_id>/curriculum.pdf` for the initial generation and
+  `…/iteration-N.pdf` after round N. At most four per profile, since
+  `MAX_RESUME_ITERATIONS` is 3. Stage 0 keeps the name `curriculum.pdf` so the
+  objects written before 0008 are not orphaned.
+- **`GeneratedResume.stage` is the ROUND, not the version.** It is derived in
+  `resolveStage` (`lib/resume/resume-generator.ts`) as `iteration + 1` — the same
+  expression `POST /iterations` uses to pick a table — which is what makes the PDF
+  at stage N and the answers in `iteration_N` the same round. Deriving it from the
+  version instead would let a mid-round `regenerate-section` or `proofread` consume
+  the next round's object; those re-render the round on file (`proofreadAndRerender`
+  passes `stage: resume.stage` explicitly).
+- **Storage growth is bounded by the round cap, not by regenerations.** Within a
+  round every write overwrites, so a user who regenerates twenty times still holds
+  four PDFs. A PDF *per version* would be unbounded and would multiply PII at rest
+  for no user-facing gain.
 - **The user id must stay the first path segment** — the Storage RLS policies
   authorize on `(storage.foldername(name))[1] = auth.uid()`. Pinned by
-  `tests/unit/resume-pdf-storage.test.ts`.
+  `tests/unit/resume-pdf-storage.test.ts`, along with the per-round file names.
 - **The save is best-effort and never throws.** A PDF is derived data; losing a
   finished résumé because Chromium hiccuped would be far worse than a missing file
   the download path re-renders (and back-fills) anyway. Failures are logged and
   visible as the gap between `resume_generated` and `resume_pdf_stored`.
 - **The seam is `ResumeArtifactWriter`** (`lib/resume/resume-artifacts.ts`), injected
   into `generateResume` / `proofreadAndRerender` — the only two functions that create
-  a `resume_pdfs` row. Enforcing it there rather than in each of the four
-  routes is what makes "every generation replaces the PDF" true by construction. The
-  parameter is optional so unit tests run without Chromium; routes always pass
-  `resumeArtifacts` from the request context.
+  a résumé. Enforcing it there rather than in each of the four routes is what makes
+  "every generation replaces its round's PDF" true by construction. It also stamps
+  the path onto every `iteration_N` row of the round (`setIterationResumePdf`), which
+  is what makes the history browsable from the table. The parameter is optional so
+  unit tests run without Chromium; routes always pass `resumeArtifacts` from the
+  request context.
 - The render runs **inside the generation lock**, so concurrent requests cannot race
-  to overwrite the single stored file with different versions.
+  to overwrite a round's stored file with different versions.
 
 ## PDF rendering (two browsers, one interface)
 
@@ -284,20 +298,35 @@ Rules that follow:
   both packages resolve with the API the launch code uses. That is the guard against
   a deploy-only break.
 
-## Database schema (5 tables)
+## Database schema (4 tables)
 
 ```
 funnel        one row per résumé — profile columns + the eight capture sections,
-              the funnel Q&A and the question state, all as JSONB
-resume_pdfs   one row per generated résumé (content + html + pdf_path)
+              the funnel Q&A and the question state, all as JSONB, plus the
+              CURRENT generated résumé (resume_id/_content/_html/_version/
+              _stage/_pdf)
 iteration_1   \
-iteration_2    >  the improvement round's questions and answers
-iteration_3   /
+iteration_2    >  the improvement round's questions and answers, each row also
+iteration_3   /   naming the PDF that round produced (resume_pdf)
 ```
 
-`0007_simplified_schema.sql` collapsed 13 tables into these. The rules that follow
-from it:
+`0007_simplified_schema.sql` collapsed 13 tables into five;
+`0008_resume_pdf_per_stage.sql` dropped `resume_pdfs` for the fifth. The rules that
+follow:
 
+- **There is exactly ONE generated résumé per profile**, on the `funnel` row.
+  `resume_pdfs` was named for its path column but was really the résumé table
+  (`content` + `html` are what the CV page, preview, analyzer, proofreader and
+  download all read) and was joined 1:1 in every path that touched it, so it became
+  columns. `getGeneratedResume(id)` therefore answers "is `id` still the current
+  résumé?" — and `updateGeneratedResume` filters on `resume_id`, so a late PDF write
+  from a superseded generation finds no row instead of clobbering a newer path.
+- **`resume_version` counts generations; `resume_stage` is the round.** A proofread
+  or section regeneration bumps the version without claiming a round. See **Saved
+  résumé PDFs** above.
+- **Dropping `resume_pdfs` gave up per-version content history.** What survives per
+  round is the rendered PDF, not diffable JSON. That was the accepted trade for
+  per-round history at bounded PII.
 - **JSONB columns hold DOMAIN objects verbatim** — camelCase, exactly the shapes in
   `types/domain.ts`. What the Supabase editor shows is what the app sees, and there
   is no row↔domain mapping layer to keep in sync.
@@ -325,6 +354,8 @@ from it:
   `POST /generate`. It used to be localStorage, where clearing site data reset it.
 - The `iteration_N` rows are an **audit log**: the answers are applied to `funnel`
   through the normal pipeline, so deleting one loses the record, not résumé content.
+  Their `resume_pdf` is the exception worth knowing — it is the only pointer to the
+  round's PDF, so deleting the rows orphans those bytes in the bucket.
 - `users` is gone; `funnel.user_id` references `auth.users` directly.
 
 ## Database rules

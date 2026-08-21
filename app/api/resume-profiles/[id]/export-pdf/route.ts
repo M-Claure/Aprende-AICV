@@ -42,10 +42,15 @@ export async function POST(_request: Request, { params }: { params: { id: string
     }
     if (!resume.html) throw Errors.notReady("El currículum aún no tiene contenido para exportar.");
 
-    // Prefer the saved file. `getResumePdf` returns null for a missing object, so
-    // a stale `pdfPath` (file removed out of band) falls through to a re-render.
+    // Prefer the saved file — the one for the résumé's own round, since a profile
+    // now holds up to four. `getResumePdf` returns null for a missing object, so a
+    // stale `pdfPath` (file removed out of band) falls through to a re-render.
     let pdf = resume.pdfPath
-      ? await resumeFiles.getResumePdf({ userId, profileId: params.id })
+      ? await resumeFiles.getResumePdf({
+          userId,
+          profileId: params.id,
+          stage: resume.stage,
+        })
       : null;
 
     if (!pdf) {

@@ -5,14 +5,19 @@ import { generateResume } from "@/lib/resume/resume-generator";
 import { proofreadAndRerender } from "@/lib/resume/proofread-resume";
 import { createResumePdfWriter } from "@/lib/resume/resume-artifacts";
 import { MemoryResumeFileStore, resumePdfPath } from "@/lib/storage/resume-file-store";
+import { MAX_RESUME_ITERATIONS } from "@/lib/config/limits";
 import type { PdfGenerator } from "@/lib/resume/pdf-generator";
 
 /**
- * "Save the PDF as the user goes, replacing what was there."
+ * "Save the PDF as the user goes — one per improvement round."
  *
- * The invariant under test: every path that creates a `generated_resumes` row
- * leaves exactly ONE stored PDF for the profile, holding the newest render — and
- * a PDF failure never costs the user their résumé.
+ * The invariants under test (see supabase/migrations/0008_resume_pdf_per_stage.sql):
+ *  * every path that creates a résumé stores its PDF under the round it belongs
+ *    to, so the rounds accumulate into a visible history;
+ *  * within a round, a re-render REPLACES the object rather than adding one, so
+ *    storage is bounded by the round cap and not by how often a user regenerates;
+ *  * the round's `iteration_N` rows are stamped with the path they produced;
+ *  * and a PDF failure never costs the user their résumé.
  */
 
 const USER = "u1";
@@ -56,8 +61,19 @@ async function seedProfile() {
   return profile.id;
 }
 
-const read = async (profileId: string) =>
-  new TextDecoder().decode((await files.getResumePdf({ userId: USER, profileId }))!);
+const read = async (profileId: string, stage = 0) =>
+  new TextDecoder().decode((await files.getResumePdf({ userId: USER, profileId, stage }))!);
+
+/**
+ * Generate exactly the way `POST /generate` does — including the detail that
+ * makes the stages line up: the FIRST generation is free and leaves the round
+ * counter alone; every one after it closes a round and bumps it.
+ */
+async function closeRound(profileId: string, pdf: PdfGenerator) {
+  const isRegeneration = (await store.getLatestGeneratedResume(profileId)) !== null;
+  await generateResume(store, ai, profileId, writer(pdf));
+  if (isRegeneration) await store.advanceIteration(profileId, MAX_RESUME_ITERATIONS);
+}
 
 beforeEach(() => {
   store = new MemoryStore();
@@ -71,7 +87,29 @@ describe("object path", () => {
     expect(resumePdfPath({ userId: "user-a", profileId: "prof-1" })).toBe(
       "user-a/prof-1/curriculum.pdf",
     );
-    expect(resumePdfPath({ userId: "user-a", profileId: "prof-1" }).split("/")[0]).toBe("user-a");
+    for (const stage of [0, 1, 2, 3]) {
+      expect(
+        resumePdfPath({ userId: "user-a", profileId: "prof-1", stage }).split("/")[0],
+      ).toBe("user-a");
+    }
+  });
+
+  it("keeps curriculum.pdf for stage 0 so pre-0008 objects are not orphaned", () => {
+    const ref = { userId: USER, profileId: "p1" };
+    expect(resumePdfPath(ref)).toBe(`${USER}/p1/curriculum.pdf`);
+    expect(resumePdfPath({ ...ref, stage: 0 })).toBe(resumePdfPath(ref));
+  });
+
+  it("gives every improvement round its own object", () => {
+    const ref = { userId: USER, profileId: "p1" };
+    const paths = [0, 1, 2, 3].map((stage) => resumePdfPath({ ...ref, stage }));
+    expect(paths).toEqual([
+      `${USER}/p1/curriculum.pdf`,
+      `${USER}/p1/iteration-1.pdf`,
+      `${USER}/p1/iteration-2.pdf`,
+      `${USER}/p1/iteration-3.pdf`,
+    ]);
+    expect(new Set(paths).size).toBe(4);
   });
 
   it("gives every profile of a user its own object", () => {
@@ -89,6 +127,8 @@ describe("generation saves a PDF", () => {
     const { resume } = await generateResume(store, ai, id, writer(pdf));
 
     expect(pdf.calls).toHaveLength(1);
+    // The first generation is round 0 — before any improvement round.
+    expect(resume.stage).toBe(0);
     expect(resume.pdfPath).toBe(resumePdfPath({ userId: USER, profileId: id }));
     expect(await read(id)).toBe("PDF#1");
     // The returned résumé carries the path, not a stale pre-save copy.
@@ -96,33 +136,87 @@ describe("generation saves a PDF", () => {
     expect(persisted?.pdfPath).toBe(resume.pdfPath);
   });
 
-  it("replaces the stored PDF on every regeneration, never accumulating", async () => {
+  it("replaces the open round's PDF on every regeneration, never accumulating", async () => {
     const pdf = fakePdf();
     const id = await seedProfile();
 
     await generateResume(store, ai, id, writer(pdf));
     expect(await read(id)).toBe("PDF#1");
 
+    // Two more generations without the round counter moving — a section
+    // regeneration, say. They belong to the same open round, so they overwrite
+    // its object instead of consuming the rounds after it.
     await generateResume(store, ai, id, writer(pdf));
     await generateResume(store, ai, id, writer(pdf));
 
-    // Three generations, three renders — but still exactly one stored object,
-    // holding the newest render.
     expect(pdf.calls).toHaveLength(3);
-    expect(files.size).toBe(1);
-    expect(await read(id)).toBe("PDF#3");
+    expect(files.size).toBe(2); // curriculum.pdf + the open round's
+    expect(await read(id, 1)).toBe("PDF#3");
+    // The initial generation's PDF is untouched by later rounds.
+    expect(await read(id, 0)).toBe("PDF#1");
   });
 
-  it("replaces it after a proofread pass too", async () => {
+  it("keeps one PDF per round, so the rounds read as a history", async () => {
     const pdf = fakePdf();
     const id = await seedProfile();
+
+    await closeRound(id, pdf); // initial generation → curriculum.pdf
+    await closeRound(id, pdf); // round 1 → iteration-1.pdf
+    await closeRound(id, pdf); // round 2 → iteration-2.pdf
+    await closeRound(id, pdf); // round 3 → iteration-3.pdf
+
+    // Four generations, four objects — every earlier round still readable.
+    expect(files.size).toBe(4);
+    expect(await read(id, 0)).toBe("PDF#1");
+    expect(await read(id, 1)).toBe("PDF#2");
+    expect(await read(id, 2)).toBe("PDF#3");
+    expect(await read(id, 3)).toBe("PDF#4");
+  });
+
+  it("never writes past the last round, however many times it regenerates", async () => {
+    const pdf = fakePdf();
+    const id = await seedProfile();
+    for (let i = 0; i < MAX_RESUME_ITERATIONS + 4; i++) await closeRound(id, pdf);
+
+    // MAX_RESUME_ITERATIONS is 3 and there is one table per round, so a 4th
+    // stage would name a PDF no `iteration_N` table could reference.
+    expect(files.size).toBe(MAX_RESUME_ITERATIONS + 1);
+    const { resume } = await generateResume(store, ai, id, writer(pdf));
+    expect(resume.stage).toBe(MAX_RESUME_ITERATIONS);
+  });
+
+  it("stamps the round's logged answers with the PDF they produced", async () => {
+    const pdf = fakePdf();
+    const id = await seedProfile();
+    await closeRound(id, pdf); // initial generation, no round to stamp
+
+    // The user answers two round-1 questions, then regenerates.
+    await store.recordIterationAnswer(id, 1, { questionId: "q1", question: "¿Y?", answer: "sí" });
+    await store.recordIterationAnswer(id, 1, { questionId: "q2", question: "¿Ya?", answer: "no" });
     await generateResume(store, ai, id, writer(pdf));
+
+    const round1 = await store.listIterationAnswers(id, 1);
+    const expected = resumePdfPath({ userId: USER, profileId: id, stage: 1 });
+    // Same value on every row of the round — one row per question, so any row
+    // you open names the PDF the round ended up with.
+    expect(round1.map((a) => a.resumePdfPath)).toEqual([expected, expected]);
+    // ...and only that round's.
+    expect((await store.listIterationAnswers(id, 2)).length).toBe(0);
+  });
+
+  it("replaces the round's PDF after a proofread pass too", async () => {
+    const pdf = fakePdf();
+    const id = await seedProfile();
+    await closeRound(id, pdf); // curriculum.pdf = PDF#1
+    await generateResume(store, ai, id, writer(pdf)); // round 1 = PDF#2
 
     const { resume } = await proofreadAndRerender(store, ai, id, writer(pdf));
 
-    expect(files.size).toBe(1);
-    expect(await read(id)).toBe("PDF#2");
-    expect(resume.pdfPath).toBe(resumePdfPath({ userId: USER, profileId: id }));
+    // A proofread is a re-render of the round on file, not a new round.
+    expect(resume.stage).toBe(1);
+    expect(files.size).toBe(2);
+    expect(await read(id, 1)).toBe("PDF#3");
+    expect(resume.pdfPath).toBe(resumePdfPath({ userId: USER, profileId: id, stage: 1 }));
   });
 
   it("keeps each profile's PDF separate", async () => {

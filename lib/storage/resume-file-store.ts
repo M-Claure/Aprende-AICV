@@ -7,20 +7,23 @@ import type { Store } from "@/lib/repositories/store";
  * domain code depends on the shape, not on Supabase. `MemoryResumeFileStore`
  * lets the whole save-on-generate path be unit-tested with no network.
  *
- * ## One PDF per profile
- * The path is derived from the profile, not from the résumé *version*, and every
- * write replaces what was there. A profile therefore holds exactly one PDF — the
- * render of its most recent generation — so storage cannot grow without bound as
- * a user iterates, and "download" can never hand back a stale version.
+ * ## One PDF per improvement round
+ * The path is derived from the profile and the résumé's `stage` — the improvement
+ * round it belongs to — not from its *version*. A profile therefore holds at most
+ * four objects (the initial `curriculum.pdf` plus `iteration-1..3.pdf`), and
+ * within a round every write replaces what was there.
  *
- * The trade-off is that older `generated_resumes` rows are not individually
- * downloadable. That is deliberate: nothing in the product offers version history,
- * and keeping a PDF per version would multiply PII at rest for no user-facing gain.
+ * That bound is what keeps this safe: storage grows with the round cap, never with
+ * how many times a user regenerates, and a download can never hand back a stale
+ * version of the round it asks for. Keeping a PDF per *version* instead would be
+ * unbounded and would multiply PII at rest for no user-facing gain — the rounds
+ * are the history the product actually exposes (`iteration_N.resume_pdf`).
  */
 export interface ResumeFileStore {
   /**
-   * Write the profile's PDF, replacing any previous one. Returns the stored
-   * object path, which is what gets recorded on `generated_resumes.pdfPath`.
+   * Write the PDF for this profile + stage, replacing any previous one at the
+   * same stage. Returns the stored object path, which is what gets recorded on
+   * `funnel.resume_pdf` (and on the round's `iteration_N.resume_pdf` rows).
    */
   putResumePdf(input: ResumePdfRef & { pdf: Uint8Array }): Promise<string>;
   /** Read the stored PDF back, or `null` when nothing is stored. */
@@ -29,22 +32,34 @@ export interface ResumeFileStore {
   deleteResumePdf(input: ResumePdfRef): Promise<void>;
 }
 
-/** Identifies whose PDF, and for which profile. */
+/** Identifies whose PDF, for which profile, and from which improvement round. */
 export interface ResumePdfRef {
   userId: string;
   profileId: string;
+  /**
+   * Improvement round the résumé belongs to: 0 for the initial generation,
+   * 1..MAX_RESUME_ITERATIONS after that round. Defaults to 0 so a caller that
+   * only ever dealt with "the profile's PDF" keeps addressing the same object
+   * it always did.
+   */
+  stage?: number;
 }
 
 /**
- * Object path for a profile's PDF.
+ * Object path for one round's PDF.
  *
  * The **user id must stay the first segment**: the Supabase Storage RLS policies
  * in `supabase/migrations/0006_resume_pdf_storage.sql` authorize on
  * `(storage.foldername(name))[1] = auth.uid()`, so changing this layout silently
  * changes who can read the file. Covered by `tests/unit/resume-pdf-storage.test.ts`.
+ *
+ * Stage 0 keeps the name `curriculum.pdf` rather than `iteration-0.pdf`: it is
+ * the file every profile already has on disk from before 0008, and renaming it
+ * would orphan those bytes for no gain.
  */
-export function resumePdfPath({ userId, profileId }: ResumePdfRef): string {
-  return `${userId}/${profileId}/curriculum.pdf`;
+export function resumePdfPath({ userId, profileId, stage = 0 }: ResumePdfRef): string {
+  const file = stage > 0 ? `iteration-${stage}.pdf` : "curriculum.pdf";
+  return `${userId}/${profileId}/${file}`;
 }
 
 /** The bucket these objects live in. Private — reads go through the API. */
@@ -80,4 +95,4 @@ export class MemoryResumeFileStore implements ResumeFileStore {
 }
 
 /** Narrow slice of `Store` the artifact writer needs — keeps its deps honest. */
-export type ResumeRowUpdater = Pick<Store, "updateGeneratedResume">;
+export type ResumeRowUpdater = Pick<Store, "updateGeneratedResume" | "setIterationResumePdf">;

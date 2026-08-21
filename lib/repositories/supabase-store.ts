@@ -65,8 +65,8 @@ import type {
  *
  *   funnel        one row per résumé — profile columns plus the eight capture
  *                 sections, the funnel Q&A and the question state, as JSONB
- *   resume_pdfs   one row per generated résumé
- *   iteration_1/2/3   the improvement round's questions and answers
+ *   iteration_1/2/3   the improvement round's questions and answers, each row
+ *                     naming the PDF its round produced
  *
  * ## Why this file is now a third of its former size
  * The JSONB columns hold the DOMAIN objects verbatim — camelCase, exactly the
@@ -571,39 +571,43 @@ export class SupabaseStore implements Store {
     });
   }
 
-  // ── Generated résumés (resume_pdfs) ───────────────────────────────────────
+  // ── Generated résumé (the funnel row's resume_* columns) ──────────────────
+  // 0008 dropped `resume_pdfs`: a profile has exactly one current résumé, so it
+  // is columns on `funnel` rather than a table joined 1:1 in every read path.
 
   async createGeneratedResume(
     profileId: string,
     input: CreateGeneratedResumeInput,
   ): Promise<GeneratedResume> {
-    const latest = await this.getLatestGeneratedResume(profileId);
-    const resume = buildGeneratedResume(profileId, input, (latest?.version ?? 0) + 1);
-    const { error } = await this.client.from("resume_pdfs").insert(toResumeRow(resume));
-    if (error) throw Errors.internal(error.message);
-    return resume;
+    // Through `mutateRow` so the version bump is read-modify-write under the
+    // optimistic guard — two concurrent generations cannot both claim a version.
+    return this.mutateRow(profileId, (row) => {
+      const resume = buildGeneratedResume(
+        profileId,
+        input,
+        ((row.resume_version as number | undefined) ?? 0) + 1,
+      );
+      return { patch: toResumeColumns(resume), result: clone(resume) };
+    });
   }
 
   async getGeneratedResume(id: string): Promise<GeneratedResume | null> {
     const { data, error } = await this.client
-      .from("resume_pdfs")
+      .from("funnel")
       .select("*")
-      .eq("id", id)
-      .maybeSingle();
-    if (error) throw Errors.internal(error.message);
-    return data ? toResume(data) : null;
-  }
-
-  async getLatestGeneratedResume(profileId: string): Promise<GeneratedResume | null> {
-    const { data, error } = await this.client
-      .from("resume_pdfs")
-      .select("*")
-      .eq("funnel_id", profileId)
-      .order("version", { ascending: false })
+      .eq("resume_id", id)
       .limit(1)
       .maybeSingle();
     if (error) throw Errors.internal(error.message);
-    return data ? toResume(data) : null;
+    return data ? toResume(data as FunnelRow) : null;
+  }
+
+  async getLatestGeneratedResume(profileId: string): Promise<GeneratedResume | null> {
+    const row = await this.fetchRow(profileId);
+    // `resume_id` is null until the first generation; an empty résumé is not a
+    // résumé, and callers branch on null to decide whether to generate.
+    if (!row || !row.resume_id) return null;
+    return toResume(row);
   }
 
   async updateGeneratedResume(
@@ -611,17 +615,22 @@ export class SupabaseStore implements Store {
     patch: Partial<Pick<GeneratedResume, "pdfPath" | "html">>,
   ): Promise<GeneratedResume> {
     const columns: Record<string, unknown> = {};
-    if (patch.pdfPath !== undefined) columns.pdf_path = patch.pdfPath;
-    if (patch.html !== undefined) columns.html = patch.html;
+    if (patch.pdfPath !== undefined) columns.resume_pdf = patch.pdfPath;
+    if (patch.html !== undefined) columns.resume_html = patch.html;
+    // Guarded on `resume_id`, so a PDF write from a generation that has since
+    // been superseded matches no row and throws instead of overwriting the newer
+    // résumé's path. `revision` is deliberately not bumped: this records a
+    // derived artifact, and racing it against a concurrent list edit would fail
+    // a write the user cares about for one they do not.
     const { data, error } = await this.client
-      .from("resume_pdfs")
+      .from("funnel")
       .update(columns)
-      .eq("id", id)
+      .eq("resume_id", id)
       .select("*")
       .maybeSingle();
     if (error) throw Errors.internal(error.message);
     if (!data) throw Errors.notFound("Currículum generado no encontrado");
-    return toResume(data);
+    return toResume(data as FunnelRow);
   }
 
   // ── Improvement iterations ────────────────────────────────────────────────
@@ -666,6 +675,21 @@ export class SupabaseStore implements Store {
     if (error) throw Errors.internal(error.message);
     return (data ?? []).map((r) => toIterationAnswer(iteration, r));
   }
+
+  async setIterationResumePdf(
+    profileId: string,
+    iteration: number,
+    pdfPath: string,
+  ): Promise<void> {
+    // Every row of the round gets the same path — see `Store.setIterationResumePdf`.
+    // Matching no rows is a normal outcome (a round the user never answered
+    // into), so this does not assert a row count.
+    const { error } = await this.client
+      .from(iterationTable(iteration))
+      .update({ resume_pdf: pdfPath })
+      .eq("funnel_id", profileId);
+    if (error) throw Errors.internal(error.message);
+  }
 }
 
 /**
@@ -703,12 +727,20 @@ function toProfile(row: FunnelRow): ResumeProfile {
   };
 }
 
-function toResumeRow(resume: GeneratedResume): Record<string, unknown> {
+/**
+ * The résumé, as the `funnel` row's `resume_*` columns.
+ *
+ * `resume_content` holds the document itself; `createdAt` is intentionally NOT
+ * persisted separately — the row already has `updated_at`, and a generation is
+ * always the write that touched it.
+ */
+function toResumeColumns(resume: GeneratedResume): Record<string, unknown> {
   return {
-    id: resume.id,
-    funnel_id: resume.resumeProfileId,
-    version: resume.version,
-    content: {
+    resume_id: resume.id,
+    resume_version: resume.version,
+    resume_stage: resume.stage,
+    resume_content: {
+      createdAt: resume.createdAt,
       professionalSummary: resume.professionalSummary,
       skills: resume.skills,
       experience: resume.experience,
@@ -717,18 +749,18 @@ function toResumeRow(resume: GeneratedResume): Record<string, unknown> {
       projects: resume.projects,
       languages: resume.languages,
     },
-    html: resume.html,
-    pdf_path: resume.pdfPath,
-    created_at: resume.createdAt,
+    resume_html: resume.html,
+    resume_pdf: resume.pdfPath,
   };
 }
 
 function toResume(row: any): GeneratedResume {
-  const c = (row.content ?? {}) as Record<string, any>;
+  const c = (row.resume_content ?? {}) as Record<string, any>;
   return {
-    id: row.id,
-    resumeProfileId: row.funnel_id,
-    version: row.version,
+    id: row.resume_id,
+    resumeProfileId: row.id,
+    version: row.resume_version ?? 0,
+    stage: row.resume_stage ?? 0,
     professionalSummary: c.professionalSummary ?? "",
     skills: c.skills ?? [],
     experience: c.experience ?? [],
@@ -736,9 +768,9 @@ function toResume(row: any): GeneratedResume {
     certifications: c.certifications ?? [],
     projects: c.projects ?? [],
     languages: c.languages ?? [],
-    html: row.html ?? "",
-    pdfPath: row.pdf_path ?? null,
-    createdAt: row.created_at,
+    html: row.resume_html ?? "",
+    pdfPath: row.resume_pdf ?? null,
+    createdAt: c.createdAt ?? row.updated_at,
   };
 }
 
@@ -750,6 +782,7 @@ function toIterationAnswer(iteration: number, row: any): IterationAnswer {
     questionId: row.question_id,
     question: row.question,
     answer: row.answer ?? null,
+    resumePdfPath: row.resume_pdf ?? null,
     createdAt: row.created_at,
   };
 }

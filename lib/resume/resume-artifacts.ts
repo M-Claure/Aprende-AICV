@@ -7,9 +7,9 @@ import type { ResumeFileStore, ResumeRowUpdater } from "@/lib/storage/resume-fil
  * Side-effects that run when a new résumé version is persisted.
  *
  * `generateResume` and `proofreadResume` are the only two places that create a
- * `generated_resumes` row, and both call this — so "every generation replaces the
- * saved PDF" is enforced at the row-creation seam rather than remembered at each
- * of the four routes that can trigger one.
+ * generated résumé, and both call this — so "every generation replaces the saved
+ * PDF for its round" is enforced at the creation seam rather than remembered at
+ * each of the four routes that can trigger one.
  *
  * It is an injected interface (not a direct import) so the résumé generator never
  * pulls in Chromium or Supabase Storage, and so the whole path is unit-testable
@@ -36,8 +36,10 @@ export interface ResumePdfWriterDeps {
 }
 
 /**
- * The production writer: render the résumé HTML to PDF, overwrite the profile's
- * stored file, and record the object path on the row.
+ * The production writer: render the résumé HTML to PDF, overwrite the file stored
+ * for the résumé's ROUND, and record the object path on the funnel row — plus on
+ * every logged answer of that round, which is what makes the improvement visible
+ * in `iteration_N` (see `supabase/migrations/0008_resume_pdf_per_stage.sql`).
  *
  * Deliberately synchronous with the generation request rather than fired and
  * forgotten. Work started after a response is returned is not guaranteed to run
@@ -59,9 +61,16 @@ export function createResumePdfWriter(deps: ResumePdfWriterDeps): ResumeArtifact
         const path = await files.putResumePdf({
           userId,
           profileId: resume.resumeProfileId,
+          stage: resume.stage,
           pdf: bytes,
         });
         const updated = await store.updateGeneratedResume(resume.id, { pdfPath: path });
+        // Stamp the round this résumé closed, so `iteration_N` reads as a history:
+        // each round's rows name the PDF that came out of it. Stage 0 is the
+        // initial generation and belongs to no round.
+        if (resume.stage > 0) {
+          await store.setIterationResumePdf(resume.resumeProfileId, resume.stage, path);
+        }
         analytics?.track(
           "resume_pdf_stored",
           { resumeProfileId: resume.resumeProfileId, version: resume.version },
@@ -73,7 +82,7 @@ export function createResumePdfWriter(deps: ResumePdfWriterDeps): ResumeArtifact
         // enough context to find the profile, and never with résumé content.
         console.error(
           `[resume-artifacts] failed to store PDF for profile ${resume.resumeProfileId} ` +
-            `(version ${resume.version}):`,
+            `(version ${resume.version}, round ${resume.stage}):`,
           err,
         );
         return resume;

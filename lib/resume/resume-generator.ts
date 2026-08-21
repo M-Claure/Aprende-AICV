@@ -23,6 +23,7 @@ import { assembleProfileState } from "@/lib/profile-state";
 import { buildSkillGroups, traceBullets } from "./source-tracing";
 import { sortExperienceNewestFirst } from "./experience-order";
 import { withGenerationLock } from "./generation-lock";
+import { MAX_RESUME_ITERATIONS } from "@/lib/config/limits";
 import type { ResumeArtifactWriter } from "./resume-artifacts";
 import { getResumeGuidelines } from "./guidelines";
 import { renderResumeHtml, type ResumeRenderModel } from "./resume-renderer";
@@ -47,7 +48,7 @@ export async function generateResume(
   // A second concurrent request joins the first rather than paying for its own
   // generation and writing a competing version. See lib/resume/generation-lock.ts.
   // The PDF render runs inside the lock too, so two requests can never race to
-  // overwrite the profile's single stored file with different versions.
+  // overwrite the round's stored file with different versions.
   return withGenerationLock(profileId, () => runGeneration(store, ai, profileId, artifacts));
 }
 
@@ -236,6 +237,7 @@ async function runGeneration(
   const html = renderResumeHtml(renderModel);
 
   const resume = await store.createGeneratedResume(profileId, {
+    stage: await resolveStage(store, profileId),
     professionalSummary: content.professionalSummary,
     skills: skillGroups,
     experience: experienceBlocks,
@@ -246,10 +248,32 @@ async function runGeneration(
     html,
   });
 
-  // Replaces whatever PDF the profile had. Never throws — see ResumeArtifactWriter.
+  // Replaces the PDF stored for this round. Never throws — see ResumeArtifactWriter.
   const stored = artifacts ? await artifacts.onResumeCreated(resume) : resume;
 
   return { resume: stored, renderModel };
+}
+
+/**
+ * Which improvement round this generation's PDF belongs to.
+ *
+ * The first generation is round 0 (`curriculum.pdf`). Everything after it belongs
+ * to the round currently OPEN — `iteration + 1`, the same expression
+ * `POST /iterations` uses to decide which table an answer lands in. That is what
+ * makes the two line up: the answers logged in `iteration_N` and the PDF written
+ * at stage N are the same round.
+ *
+ * Deliberately keyed on the round counter rather than on the version, so a
+ * mid-round `regenerate-section` or `proofread` re-renders the open round's object
+ * instead of consuming the next round's. And deliberately read here rather than
+ * passed in by the route: `POST /generate` bumps the counter *after* generating,
+ * so anything derived from the caller's own bookkeeping would drift.
+ */
+async function resolveStage(store: Store, profileId: string): Promise<number> {
+  const previous = await store.getLatestGeneratedResume(profileId);
+  if (!previous) return 0;
+  const completed = await store.getIteration(profileId);
+  return Math.min(MAX_RESUME_ITERATIONS, completed + 1);
 }
 
 function formatLanguageLevel(l: Language): string | null {

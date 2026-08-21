@@ -301,7 +301,19 @@ export interface QuestionState {
 export interface GeneratedResume {
   id: string;
   resumeProfileId: string;
+  /**
+   * Monotonic per-generation counter. Counts EVERY generation — including
+   * proofreads and section regenerations — so it is not the improvement round.
+   */
   version: number;
+  /**
+   * Improvement round this résumé belongs to: 0 for the initial generation,
+   * 1..MAX_RESUME_ITERATIONS after that round. It selects which PDF object the
+   * render is stored as, so it must be the ROUND and not the version — a
+   * mid-round regeneration re-renders the open round's PDF rather than claiming
+   * the next one.
+   */
+  stage: number;
   professionalSummary: string;
   skills: GeneratedSkillGroup[];
   experience: GeneratedExperienceBlock[];
@@ -311,11 +323,11 @@ export interface GeneratedResume {
   languages: GeneratedLanguageBlock[];
   html: string;
   /**
-   * Storage object path of this profile's saved PDF, or null if none was stored.
+   * Storage object path of this résumé's saved PDF, or null if none was stored.
    *
-   * There is exactly one PDF per profile and every generation replaces it, so
-   * only the LATEST version's path is meaningful — older rows may name the same
-   * object, which now holds a newer render. See `lib/storage/resume-file-store.ts`.
+   * One object per `stage`, so a profile holds up to four: the initial
+   * `curriculum.pdf` plus `iteration-1..3.pdf`. Within a stage every generation
+   * replaces the object. See `lib/storage/resume-file-store.ts`.
    */
   pdfPath: string | null;
   createdAt: string;

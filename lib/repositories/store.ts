@@ -163,8 +163,19 @@ export interface Store {
     profileId: string,
     input: CreateGeneratedResumeInput,
   ): Promise<GeneratedResume>;
+  /**
+   * The résumé with this id, or null when it is not the current one. A profile
+   * holds exactly one generated résumé (on its `funnel` row), so this answers
+   * "is `id` still the current résumé?" rather than reaching into history.
+   */
   getGeneratedResume(id: string): Promise<GeneratedResume | null>;
   getLatestGeneratedResume(profileId: string): Promise<GeneratedResume | null>;
+  /**
+   * Patch the résumé identified by `id`, which must still be the profile's
+   * CURRENT one — there is only ever one, on the `funnel` row. Throws `notFound`
+   * when it has been superseded, so a late PDF write from an overtaken
+   * generation cannot clobber a newer résumé's path.
+   */
   updateGeneratedResume(
     id: string,
     patch: Partial<Pick<GeneratedResume, "pdfPath" | "html">>,
@@ -182,6 +193,16 @@ export interface Store {
     input: IterationAnswerInput,
   ): Promise<IterationAnswer>;
   listIterationAnswers(profileId: string, iteration: number): Promise<IterationAnswer[]>;
+  /**
+   * Record the PDF a round produced on every one of that round's logged answers
+   * (`iteration_N.resume_pdf`).
+   *
+   * `iteration_N` holds one row per question, so the value repeats across the
+   * round: any row you open names the PDF that round ended up with. Called by the
+   * artifact writer once the object is stored, and a no-op when the round logged
+   * no answers — a regeneration can close a round the user never answered into.
+   */
+  setIterationResumePdf(profileId: string, iteration: number, pdfPath: string): Promise<void>;
 }
 
 /**
@@ -200,6 +221,11 @@ export interface IterationAnswer {
   questionId: string;
   question: string;
   answer: string | null;
+  /**
+   * Storage path of the PDF this round produced, or null until its regeneration
+   * runs. Identical on every answer of the round — see `setIterationResumePdf`.
+   */
+  resumePdfPath: string | null;
   createdAt: string;
 }
 

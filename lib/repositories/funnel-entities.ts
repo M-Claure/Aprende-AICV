@@ -251,6 +251,7 @@ export function buildGeneratedResume(
     id: newId(),
     resumeProfileId: profileId,
     version: input.version ?? nextVersion,
+    stage: input.stage ?? 0,
     professionalSummary: input.professionalSummary ?? "",
     skills: input.skills ?? [],
     experience: input.experience ?? [],
