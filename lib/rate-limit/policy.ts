@@ -1,0 +1,152 @@
+/**
+ * What counts as too much, and how the counter is keyed.
+ *
+ * ── Why these are code constants, not env vars ───────────────────────────────
+ * A request limit encodes a claim about how the product is legitimately used
+ * ("the funnel is about forty questions, so a hundred answers an hour is already
+ * generous"). That claim belongs next to the reasoning, in review, and under test
+ * — the same argument `ONLINE_ONLY` and `MAX_RESUME_ITERATIONS` are constants for.
+ * The SPEND caps are environment config instead, because those are money and vary
+ * per deployment (see `lib/env.ts`).
+ *
+ * ── Why the numbers are generous ─────────────────────────────────────────────
+ * The product's audience shares connections — a computer lab at an institute, a
+ * cyber café, a family behind one NAT address — and the funnel is long enough that
+ * a determined person legitimately re-answers, goes back, and regenerates. A limit
+ * tuned to stop the last 1% of abuse would block real users, and blocking a learner
+ * mid-résumé costs far more than the tokens it saves. These stop scripts, not
+ * people.
+ *
+ * Pure module: no I/O, no env, no `server-only`, so the policy is unit-testable on
+ * its own and the same table can be read from either side of the wire.
+ */
+
+/** Every operation that is counted. Adding one here is what makes it enforceable. */
+export type LimitedOperation =
+  /** Creating a new résumé. Keyed by IP: this is the one route that runs BEFORE an identity exists. */
+  | "profile_create"
+  /** One funnel answer. Cheap per call, but the model sees the narrative sections. */
+  | "answer"
+  /** Résumé generation — the expensive one (`reasoning.effort: high`). */
+  | "generate"
+  /** The critique behind the improvement loop. */
+  | "analyze"
+  /** Spelling/grammar pass at finalize. */
+  | "proofread"
+  /** Re-writing one section of an existing résumé. */
+  | "regenerate_section"
+  /** Model-assisted capture: interests extraction, entry enrichment, skill suggestion. */
+  | "assist"
+  /** Rendering the PDF. No tokens, but it launches Chromium. */
+  | "export_pdf";
+
+export interface LimitRule {
+  /** Requests allowed per window. */
+  readonly limit: number;
+  readonly windowSeconds: number;
+  /** Why this number — read this before changing it. */
+  readonly reason: string;
+}
+
+const HOUR = 3600;
+
+export const LIMITS: Record<LimitedOperation, LimitRule> = {
+  profile_create: {
+    limit: 60,
+    windowSeconds: HOUR,
+    reason:
+      "Keyed by IP, and a whole classroom or family can share one. Sixty new résumés " +
+      "an hour from a single address is beyond any real group, and still stops a script " +
+      "from minting guest identities in bulk.",
+  },
+  answer: {
+    limit: 150,
+    windowSeconds: HOUR,
+    reason:
+      "The funnel is roughly forty questions and going back re-answers them, so a real " +
+      "session lands well under a hundred. Above 150/hour nobody is typing.",
+  },
+  generate: {
+    limit: 12,
+    windowSeconds: HOUR,
+    reason:
+      "MAX_RESUME_ITERATIONS is 3, so a complete résumé needs four generations. Twelve " +
+      "leaves room to retry a failure and to edit-and-regenerate, and still bounds the " +
+      "most expensive call in the product.",
+  },
+  analyze: {
+    limit: 20,
+    windowSeconds: HOUR,
+    reason:
+      "The critique is cached until the résumé or its facts change, so a real session " +
+      "makes about four. Twenty absorbs cache misses from reloading the workspace.",
+  },
+  proofread: {
+    limit: 10,
+    windowSeconds: HOUR,
+    reason: "Runs once at finalize; the rest is retries and re-finalizing after an edit.",
+  },
+  regenerate_section: {
+    limit: 30,
+    windowSeconds: HOUR,
+    reason:
+      "Deliberately the loosest paid limit: fixing one section is the cheapest way to " +
+      "improve a résumé, so it should not be the thing that stops.",
+  },
+  assist: {
+    limit: 60,
+    windowSeconds: HOUR,
+    reason: "Small model calls attached to editing, so tied to typing speed rather than intent.",
+  },
+  export_pdf: {
+    limit: 40,
+    windowSeconds: HOUR,
+    reason:
+      "No tokens, but each one may cold-start Chromium — which is CPU, a 60s function " +
+      "ceiling, and the easiest way to exhaust concurrency.",
+  },
+};
+
+/**
+ * The counter key. Format `<scope>:<id>:<operation>`, one row per key in
+ * `rate_limits`.
+ *
+ * IP scope exists only for `profile_create`, the single route that runs before
+ * there is a user to attribute anything to. Everywhere else the key is the user,
+ * because an IP is shared by people who should not share a quota.
+ */
+export function rateLimitKey(
+  operation: LimitedOperation,
+  subject: { userId?: string | null; ip?: string | null },
+): string {
+  if (subject.userId) return `user:${subject.userId}:${operation}`;
+  // No user and no IP: one shared bucket rather than no limit at all. A proxy that
+  // strips the client address must not become a way to opt out of counting.
+  return `ip:${subject.ip || "unknown"}:${operation}`;
+}
+
+/** True when this hit count is over the operation's allowance. */
+export function isOverLimit(operation: LimitedOperation, hits: number): boolean {
+  return hits > LIMITS[operation].limit;
+}
+
+/**
+ * The client's address, best effort.
+ *
+ * `x-forwarded-for` is a comma-separated chain and the LEFTMOST entry is the
+ * original client; every proxy appends its own. Trusting the rightmost would key
+ * every request to the same edge address and make one shared bucket out of the
+ * whole internet.
+ *
+ * A client can forge this header, so an IP limit is a speed bump, not a wall — it
+ * exists to bound guest-identity creation, and the per-user limits and spend caps
+ * are what actually hold once an identity exists.
+ */
+export function clientIp(headers: Headers): string | null {
+  const forwarded = headers.get("x-forwarded-for");
+  if (forwarded) {
+    const first = forwarded.split(",")[0]?.trim();
+    if (first) return first;
+  }
+  return headers.get("x-real-ip")?.trim() || null;
+}

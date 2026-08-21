@@ -1,6 +1,7 @@
 import { handleRoute, ok } from "@/lib/http";
 import { readJson } from "@/lib/http";
 import { getRequestContext, loadOwnedProfile } from "@/lib/request-context";
+import { enforceRateLimit, funnelProviderForBudget } from "@/lib/services/usage-guard";
 import { processAnswer } from "@/lib/services/answer-pipeline";
 import { AnswerBody } from "@/lib/validation/api-schemas";
 
@@ -14,13 +15,25 @@ export const dynamic = "force-dynamic";
  */
 export async function POST(request: Request, { params }: { params: { id: string } }) {
   return handleRoute(async () => {
-    const ctx = await getRequestContext();
+    const ctx = await getRequestContext(params.id);
     await loadOwnedProfile(ctx.store, params.id, ctx.userId);
+    await enforceRateLimit("answer", { userId: ctx.userId });
     const body = AnswerBody.parse(await readJson(request));
 
+    /*
+     * Capture DEGRADES instead of blocking. Over budget this is the deterministic
+     * provider, so the answer is still saved, the raw wording is still kept verbatim
+     * and the funnel still advances — with zero model calls. Refusing here would
+     * throw away the words someone just typed over a limit they cannot see.
+     */
+    const funnelAi = await funnelProviderForBudget({
+      funnelAi: ctx.funnelAi,
+      userId: ctx.userId,
+      resumeProfileId: params.id,
+    });
+
     const result = await processAnswer(
-      // Funnel steps use the deterministic provider — no paid-model tokens per step.
-      { store: ctx.store, ai: ctx.funnelAi, analytics: ctx.analytics, userId: ctx.userId },
+      { store: ctx.store, ai: funnelAi, analytics: ctx.analytics, userId: ctx.userId },
       {
         profileId: params.id,
         questionId: body.questionId,

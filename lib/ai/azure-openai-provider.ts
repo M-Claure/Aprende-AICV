@@ -104,10 +104,19 @@ export class AzureOpenAIProvider implements AIProvider {
   readonly name = "azure-openai";
   private client: OpenAI;
 
+  /**
+   * @param spend Optional sink for what each call cost. Injected rather than
+   *   imported so this class keeps no knowledge of the database and stays
+   *   constructible in a test — the same reason `generateResume` takes a
+   *   `ResumeArtifactWriter`. Provided per request by `getRequestContext`, since the
+   *   ledger row needs the user and profile this call belongs to. Absent in the
+   *   worst-case harness and in unit tests, where nothing should be recorded.
+   */
   constructor(
     apiKey: string,
     baseURL: string,
     private readonly model: string,
+    private readonly spend?: CallSpendRecorder,
   ) {
     this.client = new OpenAI({ apiKey, baseURL });
   }
@@ -230,6 +239,11 @@ export class AzureOpenAIProvider implements AIProvider {
         // retries, which still bill). This is what makes per-generation cost
         // visible in the server logs.
         logUsage(label, this.model, res.usage, attempt);
+        // ...and charge it against the spend caps. A truncated retry billed just as
+        // much as a successful call, so it is recorded too: a cap that only counted
+        // successes would undercount exactly the failure mode that burns tokens
+        // fastest. Fire-and-forget — see `CallSpendRecorder`.
+        this.spend?.(label, this.model, res.usage);
         text = res.output_text;
         // Truncation → the JSON is incomplete and will never parse. Surface a
         // clear cause in the error details (visible in the API error envelope)
@@ -306,6 +320,21 @@ function describeConfigurationFailure(err: unknown, model: string): string | nul
   }
   return null;
 }
+
+/**
+ * Sink for what one call cost.
+ *
+ * Deliberately a plain function of exactly what this class already has — the
+ * operation label, the model, and the raw `usage` block — so the provider needs no
+ * types from the persistence layer and cannot be tempted to await a database write
+ * on the response path. Whoever supplies it decides where the number goes and is
+ * responsible for never throwing.
+ */
+export type CallSpendRecorder = (
+  label: string,
+  model: string,
+  usage: UsageTokens | undefined,
+) => void;
 
 /**
  * Per-process running total, so the cost of a whole résumé-builder session

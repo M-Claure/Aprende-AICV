@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { handleRoute } from "@/lib/http";
 import { Errors } from "@/lib/errors";
 import { getRequestContext, loadOwnedProfile } from "@/lib/request-context";
+import { enforceRateLimit } from "@/lib/services/usage-guard";
 import { generateResume } from "@/lib/resume/resume-generator";
 import { getPdfGenerator } from "@/lib/resume/pdf-generator";
 
@@ -25,8 +26,12 @@ export const runtime = "nodejs";
  */
 export async function POST(_request: Request, { params }: { params: { id: string } }) {
   return handleRoute(async () => {
-    const { userId, store, ai, analytics, resumeFiles, resumeArtifacts } = await getRequestContext();
+    const { userId, store, ai, analytics, resumeFiles, resumeArtifacts } =
+      await getRequestContext(params.id);
     const profile = await loadOwnedProfile(store, params.id, userId);
+    // No tokens here, so no budget check — but each call may cold-start Chromium
+    // inside a 60s function, which is the cheapest way to exhaust concurrency.
+    await enforceRateLimit("export_pdf", { userId });
 
     // Download is gated behind finalization: the user must explicitly finish the
     // CV before it can be exported.

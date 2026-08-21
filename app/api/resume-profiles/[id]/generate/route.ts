@@ -1,5 +1,6 @@
 import { handleRoute, ok } from "@/lib/http";
 import { getRequestContext, loadOwnedProfile } from "@/lib/request-context";
+import { assertWithinBudget, enforceRateLimit } from "@/lib/services/usage-guard";
 import { generateResume } from "@/lib/resume/resume-generator";
 import { MAX_RESUME_ITERATIONS } from "@/lib/config/limits";
 import { Errors } from "@/lib/errors";
@@ -24,8 +25,13 @@ export const runtime = "nodejs";
  */
 export async function POST(_request: Request, { params }: { params: { id: string } }) {
   return handleRoute(async () => {
-    const { userId, store, ai, analytics, resumeArtifacts } = await getRequestContext();
+    const { userId, store, ai, analytics, resumeArtifacts } = await getRequestContext(params.id);
     await loadOwnedProfile(store, params.id, userId);
+    // The most expensive call in the product, so it carries both guards. The
+    // budget check exempts a profile's FIRST résumé — nobody is refused the
+    // document they came for (see lib/spend/budget.ts).
+    await enforceRateLimit("generate", { userId });
+    await assertWithinBudget({ operation: "generate", userId, resumeProfileId: params.id, store });
 
     // A résumé already on file means this call is a regeneration, i.e. the end
     // of an improvement round.

@@ -1,5 +1,6 @@
 import { handleRoute, ok, readJson } from "@/lib/http";
 import { getRequestContext, loadOwnedProfile } from "@/lib/request-context";
+import { assertWithinBudget, enforceRateLimit } from "@/lib/services/usage-guard";
 import { generateResume } from "@/lib/resume/resume-generator";
 import { RegenerateSectionBody } from "@/lib/validation/api-schemas";
 
@@ -19,8 +20,15 @@ export const runtime = "nodejs";
  */
 export async function POST(request: Request, { params }: { params: { id: string } }) {
   return handleRoute(async () => {
-    const { userId, store, ai, analytics, resumeArtifacts } = await getRequestContext();
+    const { userId, store, ai, analytics, resumeArtifacts } = await getRequestContext(params.id);
     await loadOwnedProfile(store, params.id, userId);
+    await enforceRateLimit("regenerate_section", { userId });
+    await assertWithinBudget({
+      operation: "regenerate_section",
+      userId,
+      resumeProfileId: params.id,
+      store,
+    });
     const { section } = RegenerateSectionBody.parse(await readJson(request));
 
     const { resume } = await generateResume(store, ai, params.id, resumeArtifacts);

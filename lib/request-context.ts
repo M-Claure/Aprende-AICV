@@ -6,6 +6,8 @@ import { getEnv } from "@/lib/env";
 import { Errors } from "@/lib/errors";
 import { getStore, type Store } from "@/lib/repositories";
 import { getResumeFileStore, type ResumeFileStore } from "@/lib/storage";
+import { getSpendLedger } from "@/lib/spend";
+import { createCallSpendRecorder } from "@/lib/spend/recorder";
 import { getPdfGenerator } from "@/lib/resume/pdf-generator";
 import { createResumePdfWriter, type ResumeArtifactWriter } from "@/lib/resume/resume-artifacts";
 import { resolveUserEmail, resolveUserId } from "@/lib/auth";
@@ -32,8 +34,15 @@ export interface RequestContext {
  * AI provider + analytics. Throws 401 when no user can be resolved. In memory
  * mode the app-level user row is provisioned on the fly (Supabase does this via
  * a DB trigger).
+ *
+ * @param resumeProfileId The résumé this request is about, when it is about one.
+ *   Only used to attribute AI spend, so the per-résumé cap can exist at all — a
+ *   ledger row with no profile can be counted against the user and the day, but
+ *   never against one résumé. Pass `params.id` from any route that may reach the
+ *   model; ownership is still checked separately by `loadOwnedProfile`, which runs
+ *   before any call can happen.
  */
-export async function getRequestContext(): Promise<RequestContext> {
+export async function getRequestContext(resumeProfileId?: string): Promise<RequestContext> {
   const userId = await resolveUserId();
   if (!userId) throw Errors.unauthorized();
 
@@ -50,12 +59,20 @@ export async function getRequestContext(): Promise<RequestContext> {
 
   const analytics = getAnalytics();
   const resumeFiles = getResumeFileStore();
+  // Charges every model call this request makes against the spend caps. Bound to
+  // the user (and résumé, when known) here because that is the only place both are
+  // in scope — see `createCallSpendRecorder`.
+  const spend = createCallSpendRecorder({
+    ledger: getSpendLedger(),
+    userId,
+    resumeProfileId: resumeProfileId ?? null,
+  });
 
   return {
     userId,
     store,
-    ai: getAIProvider(),
-    funnelAi: getFunnelProvider(),
+    ai: getAIProvider(spend),
+    funnelAi: getFunnelProvider(spend),
     analytics,
     resumeFiles,
     resumeArtifacts: createResumePdfWriter({

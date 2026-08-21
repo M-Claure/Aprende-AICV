@@ -1,5 +1,6 @@
 import { handleRoute, ok } from "@/lib/http";
 import { getRequestContext, loadOwnedProfile } from "@/lib/request-context";
+import { assertWithinBudget, enforceRateLimit } from "@/lib/services/usage-guard";
 import { analyzeResume } from "@/lib/resume/resume-analyzer";
 
 export const dynamic = "force-dynamic";
@@ -11,8 +12,10 @@ export const dynamic = "force-dynamic";
  */
 export async function POST(_request: Request, { params }: { params: { id: string } }) {
   return handleRoute(async () => {
-    const { userId, store, ai } = await getRequestContext();
+    const { userId, store, ai } = await getRequestContext(params.id);
     await loadOwnedProfile(store, params.id, userId);
+    await enforceRateLimit("analyze", { userId });
+    await assertWithinBudget({ operation: "analyze", userId, resumeProfileId: params.id, store });
     const analysis = await analyzeResume(store, ai, params.id);
     return ok({ analysis });
   });

@@ -105,6 +105,32 @@ const EnvSchema = z
         },
       ),
 
+    /*
+     * ── AI spend caps (USD) ────────────────────────────────────────────────
+     *
+     * Money, so these are environment config rather than code constants: the
+     * right ceiling depends on the deployment's Azure agreement and traffic, and
+     * raising one must not need a deploy. The REQUEST limits are code constants
+     * instead — see `lib/rate-limit/policy.ts` for why.
+     *
+     * Defaults are deliberately tight. A worst-case résumé — five experiences,
+     * every answer padded to its char limit, all three improvement rounds and a
+     * proofread — estimates at roughly $0.65–0.80 on gpt-5.3-codex rates
+     * (`wc-tmp/worstcase.test.ts` is the harness that measures it). A user's
+     * FIRST résumé is never refused by the per-résumé or per-user cap, so a tight
+     * number bounds iteration and abuse without withholding the actual product.
+     */
+    AI_SPEND_CAP_PROFILE_USD: z.coerce.number().positive().default(1),
+    AI_SPEND_CAP_USER_USD: z.coerce.number().positive().default(2),
+    /** UTC calendar day, matching what `ai_spend_state()` sums. */
+    AI_SPEND_CAP_DAILY_USD: z.coerce.number().positive().default(50),
+    /**
+     * Escape hatch for local development: `off` skips every counter and cap.
+     * Never set this in a deployed environment — it is the whole protection
+     * against an unauthenticated visitor spending the Azure budget.
+     */
+    USAGE_LIMITS: z.enum(["on", "off"]).default("on"),
+
     // Test-only escape hatch: bypass Supabase auth for e2e runs.
     E2E_AUTH_BYPASS: z.string().optional(),
   })

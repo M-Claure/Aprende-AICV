@@ -76,3 +76,39 @@ export function estimateCostUsd(model: string, u: UsageTokens): number | null {
     1_000_000
   );
 }
+
+/**
+ * Cost for the SPEND CAP, which unlike the log line cannot afford to say "unknown".
+ *
+ * `estimateCostUsd` returns null for a model with no configured rates so the log can
+ * print "configura tarifas" instead of a wrong $0. A cap that treated null as $0
+ * would be worse than no cap: swapping in a model whose rates nobody added would
+ * silently make every ceiling unreachable, which is exactly the drift a cap exists
+ * to catch. So this falls back to the MOST expensive configured rate — the estimate
+ * errs toward refusing work rather than toward an unbounded bill — and says so, once.
+ */
+export function estimateCostUsdForCap(model: string, u: UsageTokens): number {
+  const known = estimateCostUsd(model, u);
+  if (known != null) return known;
+
+  warnUnpricedModel(model);
+  const worst = Object.values(RATES).reduce<ModelRates | null>(
+    (max, r) => (max && max.outputPerMTok >= r.outputPerMTok ? max : r),
+    null,
+  );
+  if (!worst) return 0;
+  const input = u.input_tokens ?? 0;
+  const output = u.output_tokens ?? 0;
+  return (input * worst.inputPerMTok + output * worst.outputPerMTok) / 1_000_000;
+}
+
+const warnedModels = new Set<string>();
+
+function warnUnpricedModel(model: string): void {
+  if (warnedModels.has(model)) return;
+  warnedModels.add(model);
+  console.error(
+    `[pricing] no rates configured for "${model}", so spend caps are being enforced ` +
+      "against the most expensive configured model. Add its rates to lib/ai/pricing.ts.",
+  );
+}

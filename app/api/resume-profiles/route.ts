@@ -1,5 +1,7 @@
 import { created, handleRoute, ok, readJson } from "@/lib/http";
 import { getRequestContext } from "@/lib/request-context";
+import { clientIp } from "@/lib/rate-limit";
+import { enforceRateLimit } from "@/lib/services/usage-guard";
 import { assembleProfileState } from "@/lib/profile-state";
 import { CreateProfileBody } from "@/lib/validation/api-schemas";
 import { parseFullName } from "@/lib/personal-contact";
@@ -10,6 +12,20 @@ export const dynamic = "force-dynamic";
 /** POST /api/resume-profiles — start a new resume profile. */
 export async function POST(request: Request) {
   return handleRoute(async () => {
+    /*
+     * Counted by IP, BEFORE `getRequestContext` — this is the one route that runs
+     * before an identity exists, and calling it is what creates one. Limiting by
+     * user here would be meaningless: each request would be its own brand-new user
+     * with a fresh quota, which is exactly how a script would mint guest accounts
+     * in bulk.
+     *
+     * The allowance is deliberately high (60/hour) because this audience shares
+     * connections — a computer lab, a cyber café, a family behind one address. A
+     * forged `x-forwarded-for` defeats it, which is why the per-user limits and the
+     * spend caps, not this line, are what actually bound cost.
+     */
+    await enforceRateLimit("profile_create", { ip: clientIp(request.headers) });
+
     const { userId, store, analytics } = await getRequestContext();
     // Zod guarantees `acceptTerms === true` plus a name and at least one valid
     // contact channel; anything missing 422s before we reach here, so nothing is

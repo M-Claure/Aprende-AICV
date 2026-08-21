@@ -11,6 +11,8 @@ export type ErrorCode =
   | "conflict"
   | "ai_validation_error"
   | "not_ready"
+  | "rate_limited"
+  | "budget_exhausted"
   | "service_unavailable"
   | "internal_error";
 
@@ -22,6 +24,10 @@ const STATUS_BY_CODE: Record<ErrorCode, number> = {
   conflict: 409,
   ai_validation_error: 502,
   not_ready: 409,
+  // Both are "come back later", so both are 429 and the CODE is what tells them
+  // apart: too many requests from you, versus the AI budget being used up.
+  rate_limited: 429,
+  budget_exhausted: 429,
   service_unavailable: 503,
   internal_error: 500,
 };
@@ -51,6 +57,17 @@ export const Errors = {
     new AppError("ai_validation_error", msg, details),
   notReady: (msg = "El perfil no está listo", details?: unknown) =>
     new AppError("not_ready", msg, details),
+  /** Too many requests from this user or IP — see lib/rate-limit/policy.ts. */
+  rateLimited: (msg = "Hiciste esto muchas veces. Espera un momento y vuelve a intentarlo.") =>
+    new AppError("rate_limited", msg),
+  /**
+   * The AI budget for this résumé, this user, or the whole day is used up. Kept
+   * separate from `rateLimited` because the fix is different: one is waiting, the
+   * other is an operator raising a cap.
+   */
+  budgetExhausted: (
+    msg = "Por ahora no podemos crear más currículums. Vuelve a intentarlo más tarde.",
+  ) => new AppError("budget_exhausted", msg),
   serviceUnavailable: (
     msg = "Sin conexión a internet. Esta aplicación requiere conexión para funcionar.",
     details?: unknown,

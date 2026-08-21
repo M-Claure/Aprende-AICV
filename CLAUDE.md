@@ -30,7 +30,9 @@ middleware.ts  (online guard → brand resolution → Supabase session refresh)
    │
 app/layout.tsx  (brand fonts + inlined :root theme + BrandProvider + header)
    │
-app/api/*  (route handlers: auth → validate → service → typed JSON)
+app/api/*  (route handlers: auth → RATE LIMIT / SPEND CAP → validate → service → typed JSON)
+   │
+lib/services/usage-guard.ts  (lib/rate-limit/* · lib/spend/*)
    │
 lib/services/answer-pipeline.ts · lib/resume/resume-generator.ts · lib/skills/*
    │
@@ -119,6 +121,9 @@ the same ceiling.
 | `lib/skills/` | evidence-backed inference + confirm/reject/edit lifecycle |
 | `lib/services/answer-pipeline.ts` | the spec §9 answer pipeline |
 | `lib/resume/` | generator · HTML renderer · PDF (two renderers: puppeteer local, `@sparticuz/chromium` serverless) · **artifact writer** (saves the PDF on every generation) · source tracing · **analyzer** (improvement loop) · **proofreader** (final spelling/grammar/format pass before finalize) |
+| `lib/rate-limit/` | pure policy (limits + keys) · `RateLimiter` iface · memory/no-op/Postgres impls |
+| `lib/spend/` | pure `checkBudget` · `SpendLedger` iface + impls · the provider's spend recorder |
+| `lib/services/usage-guard.ts` | what routes call: `enforceRateLimit` · `assertWithinBudget` · `funnelProviderForBudget` |
 | `lib/analytics/` | Amplitude (HTTP API) with PII allow-list; no-op when unconfigured |
 | `lib/services/funnel-telemetry.ts` | Records a question as *shown* (event + `QuestionState.lastShownQuestionId`) so funnel exit points are visible — see `docs/funnel-analytics.md` |
 | `lib/repositories/funnel-entities.ts` | entity construction shared by every `Store` impl, so `MemoryStore` and `SupabaseStore` cannot drift on defaults |
@@ -216,6 +221,54 @@ CTA and is in the funnel; the identity the database needs is created *for* them.
   configuration error.
 - There is no `/login` route, no sign-out, and no browser-side Supabase client. Do
   not reintroduce one; a 401 from the API is now a bug, not a prompt to log in.
+
+## Usage limits (rate limiting + AI spend caps)
+
+The product has **no login**, so an unauthenticated script can mint unlimited guest
+identities and drive `POST …/generate`, which costs real money at
+`reasoning.effort: high`. What existed before was *deduplication* (analysis cache,
+generation lock) and *cost logging* — neither is a ceiling. Two independent controls
+now bound it, and they are on or off together.
+
+- **Request limits are CODE constants** (`lib/rate-limit/policy.ts`), one per
+  operation, each carrying the reasoning for its number. A limit encodes a claim
+  about legitimate use ("the funnel is ~40 questions"), which belongs in review and
+  under test — the same argument `ONLINE_ONLY` is a constant for.
+- **Spend caps are ENV** (`AI_SPEND_CAP_{PROFILE,USER,DAILY}_USD`) — money varies per
+  deployment and raising a ceiling must not need a deploy. Three ceilings, each for a
+  different failure: one résumé looping, one identity across résumés, and *many
+  identities at once* — which only the daily cap can see, and which is exactly what
+  "no login" makes cheap.
+- **Over budget DEGRADES capture and BLOCKS production.** `funnelProviderForBudget`
+  hands the funnel the deterministic provider, so answers still save and raw wording
+  is still kept verbatim with zero model calls; `assertWithinBudget` refuses
+  generate/analyze/proofread/regenerate with a 429, because there is no cheap version
+  of writing a résumé. Being over a limit must not strand someone mid-résumé.
+- **A profile's FIRST generation is never refused** by the per-résumé or per-user cap
+  (`isFirstResume` in `lib/spend/budget.ts`). The whole product is the first PDF;
+  refusing to *improve* a résumé is acceptable, refusing to produce one is not. The
+  daily cap has no such exemption — in a flood of fresh guests every request is
+  somebody's first.
+- **Both need `SUPABASE_SERVICE_ROLE_KEY`.** The counters live in Postgres
+  (`0009_usage_limits.sql`) behind functions granted **only** to `service_role`,
+  because `NEXT_PUBLIC_SUPABASE_ANON_KEY` ships to browsers: an anon-executable
+  counter lets anyone burn another user's quota by passing their key, and write junk
+  into the ledger to trip the daily cap for everybody. Postgres and not a KV service
+  because Vercel runs many instances — an in-process counter multiplies the effective
+  limit by the instance count.
+- **Everything fails OPEN, loudly.** No service-role key, or an unreachable table,
+  logs at error level and allows the request. One unhealthy counter must not refuse
+  every résumé in the product. `USAGE_LIMITS=off` is the deliberate local-dev version
+  of the same thing.
+- **An unpriced model is charged at the most expensive known rate**
+  (`estimateCostUsdForCap`). `estimateCostUsd` returns null so the log can say
+  "configura tarifas"; a cap that read that as $0 would make every ceiling
+  unreachable the moment someone swapped the deployment — the exact drift a cap
+  exists to catch.
+- **Spend is recorded fire-and-forget** from inside the provider
+  (`CallSpendRecorder` → `lib/spend/recorder.ts`), including truncated retries, which
+  bill just as much. A ledger row is bookkeeping; a résumé the user already paid for
+  must not fail because the write was slow.
 
 ## Safety rules (enforced in CODE, not just prompts)
 
@@ -331,6 +384,10 @@ iteration_2    >  the improvement round's questions and answers, each row also
 iteration_3   /   naming the PDF that round produced (resume_pdf)
 ```
 
+Plus two infrastructure tables from `0009_usage_limits.sql` — `rate_limits` and
+`ai_spend` — which hold no user content, have RLS on with **no policies**, and are
+reachable only through functions granted to `service_role`. See **Usage limits**.
+
 `0007_simplified_schema.sql` collapsed 13 tables into five;
 `0008_resume_pdf_per_stage.sql` dropped `resume_pdfs` for the fifth. The rules that
 follow:
@@ -442,7 +499,8 @@ All via environment variables; never commit secrets. See `.env.example`.
 `AI_PROVIDER`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_BASE_URL`, `AZURE_OPENAI_MODEL`,
 `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
 `SUPABASE_SERVICE_ROLE_KEY`, `AMPLITUDE_API_KEY`, `PERSISTENCE`, `PDF_RENDERER`,
-`DEFAULT_BRAND`, `BRAND_HOST_OVERRIDES`.
+`DEFAULT_BRAND`, `BRAND_HOST_OVERRIDES`, `AI_SPEND_CAP_PROFILE_USD`,
+`AI_SPEND_CAP_USER_USD`, `AI_SPEND_CAP_DAILY_USD`, `USAGE_LIMITS`.
 
 ## Out of scope (do not add in milestone 1)
 
