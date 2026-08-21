@@ -41,6 +41,27 @@ lib/repositories/*  (Store)  ·  lib/storage/*  (ResumeFileStore)   lib/ai/*  (A
 Supabase (Postgres + Auth + RLS)          openai SDK → Azure OpenAI (server-only)
 ```
 
+**Progress bar:** the number the user watches is `state.funnelProgress`
+(`lib/question-engine/funnel-progress.ts`), **not**
+`completeness.overallScore`. `overallScore` is a data-quality score — a weighted
+average over five buckets — and it made a bad bar three ways: most funnel
+questions land in an already-saturated bucket or inside `background`, which is a
+`max()`, so it *stalled* (three consecutive questions moved it 0 points); the
+education/experience buckets *average* over entries, so adding one moved it
+*backwards*; and readiness fires while the optional buckets are empty, so
+finishing the funnel left it in the seventies. `funnelProgress` measures questions
+handled over questions handled plus questions left, against the same
+`eligibleQuestions` pool the funnel itself follows. It reaches 100 only at a
+terminus — the funnel running out of questions, or a résumé being generated
+(`runGeneration`, for the user who becomes ready early and generates with optional
+questions outstanding). `overallScore` keeps its old jobs: readiness, the review
+dashboard, and the model prompt.
+
+`estimateFunnelProgress` is pure and may dip when an answer opens follow-ups;
+`assembleProfileState` floors it at the persisted value and `advanceFunnelProgress`
+(write side, once per answer in the pipeline) guarantees at least a point of
+movement, so the bar is monotone and never parks.
+
 **Two-layer questioning:**
 1. `completeness-engine.ts` (deterministic, no LLM) decides *which* sections/fields
    are eligible and computes the `CompletenessReport` + readiness.
@@ -93,7 +114,7 @@ the same ceiling.
 | `lib/repositories/` | `Store` interface + `MemoryStore` (dev/tests) + `SupabaseStore` |
 | `lib/storage/` | `ResumeFileStore` interface + `MemoryResumeFileStore` + Supabase Storage impl — one saved résumé PDF per improvement round |
 | `lib/profile-state.ts` | Assembles `ResumeProfileState`, redacts PII, computes completeness |
-| `lib/question-engine/` | completeness · catalog · prioritizer · adaptive planner |
+| `lib/question-engine/` | completeness · catalog · prioritizer · adaptive planner · funnel progress |
 | `lib/ai/` | `AIProvider` abstraction, `MockAIProvider`, `AzureOpenAIProvider`, prompts, **Zod schemas** |
 | `lib/skills/` | evidence-backed inference + confirm/reject/edit lifecycle |
 | `lib/services/answer-pipeline.ts` | the spec §9 answer pipeline |

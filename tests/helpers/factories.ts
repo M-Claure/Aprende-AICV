@@ -7,9 +7,14 @@ import type {
   ExperienceEntryState,
   PersonalInformationState,
   ProjectState,
+  ResumeProfileState,
   SkillState,
 } from "@/types";
-import type { CompletenessInput } from "@/lib/question-engine/completeness-engine";
+import {
+  computeCompleteness,
+  type CompletenessInput,
+} from "@/lib/question-engine/completeness-engine";
+import { estimateFunnelProgress } from "@/lib/question-engine/funnel-progress";
 
 let seq = 0;
 const id = (prefix: string) => `${prefix}-${++seq}`;
@@ -123,6 +128,26 @@ export function completenessInput(o: Partial<CompletenessInput> = {}): Completen
     activeSection: o.activeSection ?? null,
     lastQuestionId: o.lastQuestionId ?? null,
   };
+}
+
+/**
+ * A full `ResumeProfileState` from a `CompletenessInput`, built in the same two
+ * phases as `assembleProfileState`: completeness first, then funnel progress
+ * measured against it. Kept here so no test hand-rolls the order and drifts from
+ * production.
+ */
+export function profileState(o: Partial<CompletenessInput> = {}): ResumeProfileState {
+  return stateFrom(completenessInput(o));
+}
+
+/** Same, from an already-built input (e.g. `readyProfile()`). */
+export function stateFrom(base: CompletenessInput): ResumeProfileState {
+  const withCompleteness: ResumeProfileState = {
+    ...base,
+    completeness: computeCompleteness(base),
+    funnelProgress: 0,
+  };
+  return { ...withCompleteness, funnelProgress: estimateFunnelProgress(withCompleteness) };
 }
 
 /** A profile that satisfies every critical requirement (ready to generate). */

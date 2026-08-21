@@ -44,7 +44,8 @@ export async function POST(_request: Request, { params }: { params: { id: string
     const { resume } = await generateResume(store, ai, params.id, resumeArtifacts);
 
     // A freshly (re)generated résumé is not finalized — the user must review and
-    // finalize the new version before downloading it.
+    // finalize the new version before downloading it. (`generateResume` has
+    // already recorded the funnel as complete — see `runGeneration`.)
     await store.updateResumeProfile(params.id, { status: "generated", finalizedAt: null });
     const iteration = isRegeneration
       ? await store.advanceIteration(params.id, MAX_RESUME_ITERATIONS)

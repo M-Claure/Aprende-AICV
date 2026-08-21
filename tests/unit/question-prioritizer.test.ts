@@ -1,22 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { computeCompleteness } from "@/lib/question-engine/completeness-engine";
 import { buildCandidates } from "@/lib/question-engine/question-prioritizer";
 import { QUESTION_CATALOG, getCatalogQuestion } from "@/lib/question-engine/question-catalog";
 import { planNextQuestion } from "@/lib/question-engine/adaptive-planner";
 import { MockAIProvider } from "@/lib/ai/mock-provider";
 import type { ResumeProfileState } from "@/types";
-import {
-  completenessInput,
-  educationState,
-  experienceState,
-  personalState,
-  readyProfile,
-  skillState,
-} from "../helpers/factories";
+import { completenessInput, educationState, experienceState, personalState, profileState, readyProfile, skillState } from "../helpers/factories";
 
 function state(overrides = {}): ResumeProfileState {
-  const base = completenessInput(overrides);
-  return { ...base, completeness: computeCompleteness(base) };
+  return profileState(overrides);
 }
 
 const provider = new MockAIProvider();

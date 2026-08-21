@@ -21,8 +21,13 @@ import type {
 import type { ResumeProfileState } from "@/types";
 import { isEducationBlank, isExperienceBlank, isProjectBlank } from "@/lib/entry-blankness";
 
-/** Everything the engine needs — the profile state minus the report itself. */
-export type CompletenessInput = Omit<ResumeProfileState, "completeness">;
+/**
+ * Everything the engine needs — the profile state minus the two values derived
+ * FROM it. `funnelProgress` is excluded as well as the report: it is measured
+ * against question eligibility, which depends on the readiness this engine
+ * computes, so it cannot be an input here without a cycle.
+ */
+export type CompletenessInput = Omit<ResumeProfileState, "completeness" | "funnelProgress">;
 
 const SKILLS_FOR_FULL_SCORE = 3;
 

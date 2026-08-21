@@ -30,6 +30,7 @@ import type {
 } from "@/types";
 import type { Store } from "@/lib/repositories/store";
 import { computeCompleteness } from "@/lib/question-engine/completeness-engine";
+import { estimateFunnelProgress } from "@/lib/question-engine/funnel-progress";
 
 export async function assembleProfileState(
   store: Store,
@@ -63,7 +64,7 @@ export async function assembleProfileState(
   const suggestedSkills = skills.filter((s) => s.status === "suggested");
   const rejectedSkills = skills.filter((s) => s.status === "rejected");
 
-  const base: Omit<ResumeProfileState, "completeness"> = {
+  const base: Omit<ResumeProfileState, "completeness" | "funnelProgress"> = {
     resumeProfileId: profileId,
     careerGoal: profile?.careerGoal ?? undefined,
     targetRole: profile?.targetRole ?? undefined,
@@ -85,7 +86,21 @@ export async function assembleProfileState(
     lastQuestionId: questionState?.lastQuestionId ?? null,
   };
 
-  return { ...base, completeness: computeCompleteness(base) };
+  // Two phases, in this order: question eligibility depends on readiness, so
+  // completeness has to exist before progress can be measured against it.
+  const withCompleteness: ResumeProfileState = {
+    ...base,
+    completeness: computeCompleteness(base),
+    funnelProgress: 0,
+  };
+  // Floored at what is already persisted, so a grown denominator can slow the bar
+  // but never walk it backwards. Reads are idempotent — only `processAnswer`
+  // advances the stored value.
+  const funnelProgress = Math.max(
+    profile?.progressPercentage ?? 0,
+    estimateFunnelProgress(withCompleteness),
+  );
+  return { ...withCompleteness, funnelProgress };
 }
 
 // ── PII-redacting mappers (domain → state) ───────────────────────────────────

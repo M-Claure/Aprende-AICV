@@ -11,8 +11,7 @@ import { AzureOpenAIProvider } from "@/lib/ai/azure-openai-provider";
 import { HybridAIProvider } from "@/lib/ai/hybrid-provider";
 import { buildNormalizerSystemPrompt, buildNormalizerUserPrompt } from "@/lib/ai/prompts";
 import { MockAIProvider } from "@/lib/ai/mock-provider";
-import { computeCompleteness } from "@/lib/question-engine/completeness-engine";
-import { completenessInput, experienceState, personalState } from "../helpers/factories";
+import { completenessInput, experienceState, personalState, stateFrom } from "../helpers/factories";
 import type { NormalizeAnswerParams } from "@/lib/ai/provider";
 import type { ResumeProfileState } from "@/types";
 
@@ -24,7 +23,7 @@ function state(): ResumeProfileState {
     personalInformation: personalState({ firstName: "Ana", hasEmail: true }),
     experience: [experienceState({ rawDescription: "Atendía clientes" })],
   });
-  return { ...base, completeness: computeCompleteness(base) };
+  return stateFrom(base);
 }
 
 const params = (questionId: string, section: NormalizeAnswerParams["section"], rawAnswer = "algo"): NormalizeAnswerParams => ({

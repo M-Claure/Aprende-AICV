@@ -11,8 +11,7 @@ import OpenAI from "openai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AzureOpenAIProvider } from "@/lib/ai/azure-openai-provider";
 import { isAppError } from "@/lib/errors";
-import { experienceState, personalState } from "../helpers/factories";
-import { computeCompleteness } from "@/lib/question-engine/completeness-engine";
+import { experienceState, personalState, stateFrom } from "../helpers/factories";
 import { completenessInput } from "../helpers/factories";
 import type { ResumeProfileState } from "@/types";
 
@@ -24,7 +23,7 @@ function state(): ResumeProfileState {
     personalInformation: personalState({ firstName: "María", hasEmail: true }),
     experience: [experienceState({ rawDescription: "Ayudaba en el negocio" })],
   });
-  return { ...base, completeness: computeCompleteness(base) };
+  return stateFrom(base);
 }
 
 /** Replaces the provider's SDK client with one whose every call throws `err`. */

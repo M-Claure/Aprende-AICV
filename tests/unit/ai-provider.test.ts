@@ -1,15 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { MockAIProvider } from "@/lib/ai/mock-provider";
 import { AdaptiveQuestionSchema, ResumeContentSchema } from "@/lib/ai/schemas";
-import { computeCompleteness } from "@/lib/question-engine/completeness-engine";
 import type { QuestionCandidate } from "@/lib/ai/provider";
-import { completenessInput, experienceState, personalState, skillState } from "../helpers/factories";
+import { completenessInput, experienceState, personalState, profileState, skillState } from "../helpers/factories";
 
 const provider = new MockAIProvider();
 
 function stateWith(overrides = {}) {
-  const base = completenessInput(overrides);
-  return { ...base, completeness: computeCompleteness(base) };
+  return profileState(overrides);
 }
 
 const candidates: QuestionCandidate[] = [

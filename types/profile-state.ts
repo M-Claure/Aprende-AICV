@@ -140,4 +140,13 @@ export interface ResumeProfileState {
   activeSection: ResumeSection | null;
   lastQuestionId: string | null;
   completeness: CompletenessReport;
+  /**
+   * Progress through the funnel, 0..100 — the number behind the user's bar and
+   * the one persisted to `funnel.progress_percentage`.
+   *
+   * Deliberately NOT `completeness.overallScore`, which is a data-quality score
+   * that stalls, can move backwards, and cannot reach 100 by finishing the
+   * funnel. See `lib/question-engine/funnel-progress.ts`.
+   */
+  funnelProgress: number;
 }

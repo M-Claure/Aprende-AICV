@@ -24,6 +24,7 @@ import { buildSkillGroups, traceBullets } from "./source-tracing";
 import { sortExperienceNewestFirst } from "./experience-order";
 import { withGenerationLock } from "./generation-lock";
 import { MAX_RESUME_ITERATIONS } from "@/lib/config/limits";
+import { FUNNEL_COMPLETE } from "@/lib/question-engine/funnel-progress";
 import type { ResumeArtifactWriter } from "./resume-artifacts";
 import { getResumeGuidelines } from "./guidelines";
 import { renderResumeHtml, type ResumeRenderModel } from "./resume-renderer";
@@ -247,6 +248,18 @@ async function runGeneration(
     languages: languageBlocks,
     html,
   });
+
+  // A résumé exists, so the funnel is over: record it as complete.
+  //
+  // The answer pipeline already reaches 100 when it runs out of questions, but a
+  // user who becomes ready early can generate with optional questions still
+  // outstanding — and the stored progress would then sit in the sixties forever
+  // despite the funnel being finished. Done here rather than in `POST /generate`
+  // so every path that produces a résumé agrees, the same reason the PDF write
+  // lives at this seam.
+  if (profile.progressPercentage !== FUNNEL_COMPLETE) {
+    await store.updateResumeProfile(profileId, { progressPercentage: FUNNEL_COMPLETE });
+  }
 
   // Replaces the PDF stored for this round. Never throws — see ResumeArtifactWriter.
   const stored = artifacts ? await artifacts.onResumeCreated(resume) : resume;

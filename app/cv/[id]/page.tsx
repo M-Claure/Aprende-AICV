@@ -223,7 +223,6 @@ export default function CvFlowPage({ params }: { params: { id: string } }) {
   }
 
   // asking
-  const completeness = state?.completeness;
   const instruction = question ? stepInstruction(question) : null;
   return (
     <Shell>
@@ -244,9 +243,7 @@ export default function CvFlowPage({ params }: { params: { id: string } }) {
         </button>
       )}
 
-      {completeness && (
-        <ProgressBar percent={completeness.overallScore} label="Progreso" />
-      )}
+      {state && <ProgressBar percent={state.funnelProgress} label="Progreso" />}
 
       {interpretation && (
         <p className="text-xs text-text-secondary">✓ {interpretation}</p>

@@ -6,10 +6,9 @@ import { processAnswer, type PipelineContext } from "@/lib/services/answer-pipel
 import { assembleProfileState } from "@/lib/profile-state";
 import { planNextQuestion } from "@/lib/question-engine/adaptive-planner";
 import { buildCandidates } from "@/lib/question-engine/question-prioritizer";
-import { computeCompleteness } from "@/lib/question-engine/completeness-engine";
 import type { AdaptiveQuestion } from "@/lib/ai/schemas";
 import type { ResumeProfileState } from "@/types";
-import { readyProfile } from "../helpers/factories";
+import { readyProfile, stateFrom } from "../helpers/factories";
 
 let store: MemoryStore;
 let ctx: PipelineContext;
@@ -83,8 +82,7 @@ describe("flow progression — no loops (regression for skills_add)", () => {
 
 describe("prioritizer — repeatable questions drop once ready", () => {
   it("does not offer repeatable 'add another' questions once the profile is ready", () => {
-    const base = readyProfile();
-    const state: ResumeProfileState = { ...base, completeness: computeCompleteness(base) };
+    const state: ResumeProfileState = stateFrom(readyProfile());
     expect(state.completeness.readyToGenerate).toBe(true);
     const ids = buildCandidates(state).map((c) => c.questionId);
     expect(ids).toContain("review_summary");

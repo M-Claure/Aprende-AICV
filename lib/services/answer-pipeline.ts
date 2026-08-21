@@ -22,6 +22,7 @@ import {
   MAX_EXPERIENCE_ENTRIES,
 } from "@/lib/config/limits";
 import { assembleProfileState } from "@/lib/profile-state";
+import { advanceFunnelProgress } from "@/lib/question-engine/funnel-progress";
 import { planNextQuestion } from "@/lib/question-engine/adaptive-planner";
 import { getCatalogQuestion } from "@/lib/question-engine/question-catalog";
 import { inferAndPersistSkills } from "@/lib/skills/skill-inference";
@@ -223,7 +224,9 @@ export async function processAnswer(
     }, userId);
   }
 
-  // 9. Recompute completeness on the fresh state.
+  // 9. Recompute completeness on the fresh state. The stored progress is read
+  // first: it is the floor the bar advances from, and only this write moves it.
+  const previousProgress = (await store.getResumeProfile(input.profileId))?.progressPercentage ?? 0;
   const profileState = await assembleProfileState(store, input.profileId);
 
   const status = profileState.completeness.readyToGenerate
@@ -244,7 +247,9 @@ export async function processAnswer(
 
   await store.updateResumeProfile(input.profileId, {
     status,
-    progressPercentage: profileState.completeness.overallScore,
+    // Monotone, and always moves by at least a point so the bar never parks —
+    // see lib/question-engine/funnel-progress.ts.
+    progressPercentage: advanceFunnelProgress(previousProgress, profileState.funnelProgress),
     currentSection: nextQuestion.section,
   });
 

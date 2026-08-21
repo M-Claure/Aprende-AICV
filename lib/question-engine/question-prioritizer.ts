@@ -14,6 +14,23 @@ import { QUESTION_CATALOG, getCatalogQuestion, type CatalogQuestion } from "./qu
 const MAX_CANDIDATES = 6;
 
 export function buildCandidates(state: ResumeProfileState): QuestionCandidate[] {
+  return eligibleQuestions(state)
+    .slice(0, MAX_CANDIDATES)
+    .map((q) => toCandidate(q, state));
+}
+
+/**
+ * Every catalog question the funnel would still consider asking, in priority
+ * order and NOT truncated to `MAX_CANDIDATES`.
+ *
+ * `buildCandidates` slices this down to what the planner is offered; the full
+ * list is what "how much is left?" has to be measured against, which is why the
+ * two are separated (`lib/question-engine/funnel-progress.ts`). Reusing one pool
+ * for both is the point: a progress bar computed from a different eligibility
+ * rule than the one the funnel actually follows would drift from what the user
+ * is asked.
+ */
+export function eligibleQuestions(state: ResumeProfileState): CatalogQuestion[] {
   const answered = new Set(state.answeredQuestionIds);
   const skipped = new Set(state.skippedQuestionIds);
   const ready = state.completeness.readyToGenerate;
@@ -37,14 +54,12 @@ export function buildCandidates(state: ResumeProfileState): QuestionCandidate[] 
   // When the profile is ready, don't keep exploring optional sections.
   const pool = ready ? preferReview(converged) : converged;
 
-  const sorted = [...pool].sort((a, b) => {
+  return [...pool].sort((a, b) => {
     const aRec = a.section === recommended ? 0 : 1;
     const bRec = b.section === recommended ? 0 : 1;
     if (aRec !== bRec) return aRec - bRec;
     return a.priority - b.priority;
   });
-
-  return sorted.slice(0, MAX_CANDIDATES).map((q) => toCandidate(q, state));
 }
 
 /** Ensure the review question leads and trim exploratory questions. */
