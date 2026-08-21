@@ -34,7 +34,6 @@ const experienceValues = (over = {}) => ({
 const educationValues = (over = {}) => ({
   institution: "Colegio Benito Juárez",
   credential: "Secundaria",
-  fieldOfStudy: "General",
   endDate: "2018",
   ...over,
 });
@@ -80,9 +79,22 @@ describe("missingEducationFields", () => {
   });
 
   it("reports each empty field", () => {
-    expect(
-      missingEducationFields({ institution: "", credential: "", fieldOfStudy: "", endDate: "" }),
-    ).toEqual(["institution", "credential", "fieldOfStudy", "endDate"]);
+    expect(missingEducationFields({ institution: "", credential: "", endDate: "" })).toEqual([
+      "institution",
+      "credential",
+      "endDate",
+    ]);
+  });
+
+  it("does NOT require an área de estudio", () => {
+    /*
+     * Deliberate: somebody whose highest level is primaria or secundaria has no
+     * field of study, and the funnel never asks for one. Requiring it would leave
+     * them unable to continue unless they invented something — a hard stop on
+     * exactly the person this product is for. The box stays, the asterisk does not.
+     */
+    expect(missingEducationFields(educationValues())).toEqual([]);
+    expect(EDUCATION_FIELD_LABEL).not.toHaveProperty("fieldOfStudy");
   });
 });
 
@@ -132,13 +144,8 @@ describe("reading a persisted entry", () => {
   });
 
   it("treats every null on an untouched entry as missing", () => {
-    const v = educationRequiredValues({
-      institution: null,
-      credential: null,
-      fieldOfStudy: null,
-      endDate: null,
-    });
-    expect(missingEducationFields(v)).toHaveLength(4);
+    const v = educationRequiredValues({ institution: null, credential: null, endDate: null });
+    expect(missingEducationFields(v)).toHaveLength(3);
   });
 });
 
@@ -157,7 +164,6 @@ describe("incompleteEntries — what blocks continuing", () => {
     id: "e1",
     institution: "Colegio",
     credential: "Secundaria",
-    fieldOfStudy: "General",
     endDate: "2018",
   };
 
@@ -206,10 +212,10 @@ describe("incompleteEntries — what blocks continuing", () => {
 
   it("reports education and experience together, education first", () => {
     const result = incompleteEntries({
-      education: [{ ...completeEducation, fieldOfStudy: null }],
+      education: [{ ...completeEducation, endDate: null }],
       experience: [{ ...completeExperience, title: null }],
     });
     expect(result.map((r) => r.section)).toEqual(["education", "experience"]);
-    expect(result[0]!.missing).toEqual([EDUCATION_FIELD_LABEL.fieldOfStudy]);
+    expect(result[0]!.missing).toEqual([EDUCATION_FIELD_LABEL.endDate]);
   });
 });

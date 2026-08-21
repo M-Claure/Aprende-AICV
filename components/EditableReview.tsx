@@ -810,13 +810,15 @@ function EducationCard({
           required
           missing={missing.has("credential")}
         />
+        {/* Optional, and deliberately without an asterisk: somebody whose highest
+            level is primaria or secundaria has no área de estudio, and the funnel
+            never asks for one. Requiring it would block them unless they typed
+            something untrue. See lib/entry-required-fields.ts. */}
         <CountedInput
           label="Área de estudio"
           value={v.fieldOfStudy}
           limit={LIMITS.fieldOfStudy}
           onChange={set("fieldOfStudy")}
-          required
-          missing={missing.has("fieldOfStudy")}
         />
         <CountedInput
           label="Año de fin"

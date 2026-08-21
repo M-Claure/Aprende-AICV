@@ -28,7 +28,17 @@
 import { parseExperienceDate } from "./experience-dates";
 
 export type ExperienceField = "title" | "organization" | "startDate" | "endDate" | "description";
-export type EducationField = "institution" | "credential" | "fieldOfStudy" | "endDate";
+/**
+ * Note what is NOT here: `fieldOfStudy`.
+ *
+ * Someone whose highest level is primaria or secundaria has no área de estudio, and
+ * the funnel never asks for one (its education questions capture the level, the
+ * institution and the year). Requiring it would leave that person unable to continue
+ * unless they typed something untrue — a hard stop on exactly the user this product
+ * exists for, in exchange for a field the résumé can do without. It keeps its box on
+ * the Review screen, without an asterisk.
+ */
+export type EducationField = "institution" | "credential" | "endDate";
 
 /** Exactly the captions the cards show, so a warning names what the eye is looking for. */
 export const EXPERIENCE_FIELD_LABEL: Record<ExperienceField, string> = {
@@ -42,7 +52,6 @@ export const EXPERIENCE_FIELD_LABEL: Record<ExperienceField, string> = {
 export const EDUCATION_FIELD_LABEL: Record<EducationField, string> = {
   institution: "Institución",
   credential: "Título / nivel",
-  fieldOfStudy: "Área de estudio",
   endDate: "Año de fin",
 };
 
@@ -59,7 +68,6 @@ export interface ExperienceRequiredValues {
 export interface EducationRequiredValues {
   institution: string;
   credential: string;
-  fieldOfStudy: string;
   endDate: string;
 }
 
@@ -86,7 +94,6 @@ export function missingEducationFields(v: EducationRequiredValues): EducationFie
   const missing: EducationField[] = [];
   if (blank(v.institution)) missing.push("institution");
   if (blank(v.credential)) missing.push("credential");
-  if (blank(v.fieldOfStudy)) missing.push("fieldOfStudy");
   if (blank(v.endDate)) missing.push("endDate");
   return missing;
 }
@@ -116,13 +123,11 @@ export function experienceRequiredValues(e: {
 export function educationRequiredValues(e: {
   institution: string | null;
   credential: string | null;
-  fieldOfStudy: string | null;
   endDate: string | null;
 }): EducationRequiredValues {
   return {
     institution: e.institution ?? "",
     credential: e.credential ?? "",
-    fieldOfStudy: e.fieldOfStudy ?? "",
     endDate: e.endDate ?? "",
   };
 }
@@ -167,7 +172,6 @@ export function incompleteEntries(state: {
     id: string;
     institution: string | null;
     credential: string | null;
-    fieldOfStudy: string | null;
     endDate: string | null;
   }[];
   experience: readonly {
