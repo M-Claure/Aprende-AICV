@@ -29,6 +29,11 @@ import {
 } from "@/lib/config/limits";
 import { isEducationBlank, isExperienceBlank } from "@/lib/entry-blankness";
 import {
+  incompleteEntries,
+  missingEducationFields,
+  missingExperienceFields,
+} from "@/lib/entry-required-fields";
+import {
   MONTH_OPTIONS,
   formatExperienceDate,
   parseExperienceDate,
@@ -120,6 +125,15 @@ export function EditableReview({
 
   const { profile, personalInformation, state } = data;
   const c = state.completeness;
+  /*
+   * The asterisks now gate CONTINUING, not just each card's Guardar.
+   *
+   * Read from the persisted entries rather than from the cards: a card someone
+   * filled in but never saved is not saved, and the résumé is built from what is
+   * stored — so "still missing" is the truthful answer, and the warning below says
+   * to press Guardar. See `lib/entry-required-fields.ts`.
+   */
+  const incomplete = incompleteEntries(state);
 
   return (
     <div className="flex flex-col gap-4">
@@ -277,6 +291,23 @@ export function EditableReview({
         onChange={(list) => withSave(() => api.setInterests(profileId, list))}
       />
 
+      {incomplete.length > 0 && (
+        <div className="rounded-xl bg-red-50 p-3 text-xs text-red-700">
+          <p className="font-semibold">Falta llenar lo que tiene * (en rojo):</p>
+          <ul className="mt-1 list-disc pl-4">
+            {incomplete.map((entry) => (
+              <li key={`${entry.section}-${entry.id}`}>
+                <strong>{entry.name}</strong>: {entry.missing.join(", ")}.
+              </li>
+            ))}
+          </ul>
+          {/* The likeliest reason someone sees this while the card looks full. */}
+          <p className="mt-1">
+            Si ya lo escribiste, aprieta <strong>&quot;Guardar&quot;</strong> en esa tarjeta.
+          </p>
+        </div>
+      )}
+
       {c.missingCriticalFields.length > 0 && (
         <div className="rounded-xl bg-red-50 p-3 text-xs text-red-700">
           <p className="font-semibold">Para generar tu currículum aún falta:</p>
@@ -310,7 +341,10 @@ export function EditableReview({
           ) : (
             <span />
           )}
-          <Button onClick={onGenerate} disabled={busy || saving || !c.readyToGenerate}>
+          <Button
+            onClick={onGenerate}
+            disabled={busy || saving || !c.readyToGenerate || incomplete.length > 0}
+          >
             {generateLabel}
           </Button>
         </div>
@@ -747,19 +781,9 @@ function EducationCard({
     endDate: entry.endDate ?? "",
   });
   const set = (k: keyof typeof v) => (value: string) => setV({ ...v, [k]: value });
-  /*
-   * Every field on this card is required — the asterisks say so, and Guardar stays
-   * blocked until each one is filled. Same rule as `ExperienceCard`, and the same
-   * limit: it gates SAVING THIS CARD, not generating the résumé, which is still the
-   * completeness engine's server-side call (`readyToGenerate`).
-   */
-  const missing = {
-    institution: v.institution.trim() === "",
-    credential: v.credential.trim() === "",
-    fieldOfStudy: v.fieldOfStudy.trim() === "",
-    endDate: v.endDate.trim() === "",
-  };
-  const incomplete = Object.values(missing).some(Boolean);
+  /* Same rule, same single source, as `ExperienceCard` above. */
+  const missing = new Set(missingEducationFields(v));
+  const incomplete = missing.size > 0;
   const tooLong = overAny(
     [v.institution, LIMITS.institution],
     [v.credential, LIMITS.credential],
@@ -776,7 +800,7 @@ function EducationCard({
           limit={LIMITS.institution}
           onChange={set("institution")}
           required
-          missing={missing.institution}
+          missing={missing.has("institution")}
         />
         <CountedInput
           label="Título / nivel"
@@ -784,7 +808,7 @@ function EducationCard({
           limit={LIMITS.credential}
           onChange={set("credential")}
           required
-          missing={missing.credential}
+          missing={missing.has("credential")}
         />
         <CountedInput
           label="Área de estudio"
@@ -792,7 +816,7 @@ function EducationCard({
           limit={LIMITS.fieldOfStudy}
           onChange={set("fieldOfStudy")}
           required
-          missing={missing.fieldOfStudy}
+          missing={missing.has("fieldOfStudy")}
         />
         <CountedInput
           label="Año de fin"
@@ -800,7 +824,7 @@ function EducationCard({
           limit={LIMITS.date}
           onChange={set("endDate")}
           required
-          missing={missing.endDate}
+          missing={missing.has("endDate")}
         />
       </div>
       <SaveRow
@@ -862,24 +886,22 @@ function ExperienceCard({
     isCurrent: entry.isCurrent,
   });
   /*
-   * Every field on this card is required — the asterisks say so, and Guardar stays
-   * blocked until each one is filled. Two deliberate exceptions:
-   *
-   *  - the end date is not asked for when "Sigo en esta experiencia" is checked, since
-   *    that checkbox IS the answer (and checking it clears the date);
-   *  - a date needs only its YEAR, not the month (see `MonthYearField`).
-   *
-   * This gates SAVING THIS CARD only. Whether the résumé can be generated is still the
-   * completeness engine's call (`readyToGenerate`), which is server-side and unchanged.
+   * Every field on this card is required. The rule itself lives in
+   * `lib/entry-required-fields.ts` because the same one decides whether the person
+   * may continue — a second copy here is how the asterisks came to announce a rule
+   * that only blocked Guardar while the big button let you through anyway.
    */
-  const missing = {
-    title: v.title.trim() === "",
-    organization: v.organization.trim() === "",
-    startDate: v.startYear.trim() === "",
-    endDate: !v.isCurrent && v.endYear.trim() === "",
-    rawDescription: v.rawDescription.trim() === "",
-  };
-  const incomplete = Object.values(missing).some(Boolean);
+  const missing = new Set(
+    missingExperienceFields({
+      title: v.title,
+      organization: v.organization,
+      startYear: v.startYear,
+      endYear: v.endYear,
+      isCurrent: v.isCurrent,
+      description: v.rawDescription,
+    }),
+  );
+  const incomplete = missing.size > 0;
   const tooLong = overAny(
     [v.title, LIMITS.title],
     [v.organization, LIMITS.organization],
@@ -895,7 +917,7 @@ function ExperienceCard({
           limit={LIMITS.title}
           onChange={(title) => setV({ ...v, title })}
           required
-          missing={missing.title}
+          missing={missing.has("title")}
         />
         <CountedInput
           label="Organización"
@@ -903,7 +925,7 @@ function ExperienceCard({
           limit={LIMITS.organization}
           onChange={(organization) => setV({ ...v, organization })}
           required
-          missing={missing.organization}
+          missing={missing.has("organization")}
         />
       </div>
       <div className="mt-2 grid grid-cols-2 gap-2">
@@ -912,7 +934,7 @@ function ExperienceCard({
           month={v.startMonth}
           year={v.startYear}
           required
-          missing={missing.startDate}
+          missing={missing.has("startDate")}
           onChange={(startMonth, startYear) => setV({ ...v, startMonth, startYear })}
         />
         <MonthYearField
@@ -921,7 +943,7 @@ function ExperienceCard({
           year={v.endYear}
           disabled={v.isCurrent}
           required={!v.isCurrent}
-          missing={missing.endDate}
+          missing={missing.has("endDate")}
           onChange={(endMonth, endYear) => setV({ ...v, endMonth, endYear })}
         />
       </div>
@@ -973,7 +995,7 @@ function ExperienceCard({
           rows={3}
           onChange={(rawDescription) => setV({ ...v, rawDescription })}
           required
-          missing={missing.rawDescription}
+          missing={missing.has("description")}
         />
       </div>
       <SaveRow
