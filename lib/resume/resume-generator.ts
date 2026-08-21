@@ -23,6 +23,7 @@ import { assembleProfileState } from "@/lib/profile-state";
 import { buildSkillGroups, traceBullets } from "./source-tracing";
 import { sortExperienceNewestFirst } from "./experience-order";
 import { withGenerationLock } from "./generation-lock";
+import { labelForLanguageLevel } from "@/lib/language-levels";
 import { MAX_RESUME_ITERATIONS } from "@/lib/config/limits";
 import { FUNNEL_COMPLETE } from "@/lib/question-engine/funnel-progress";
 import type { ResumeArtifactWriter } from "./resume-artifacts";
@@ -289,14 +290,14 @@ async function resolveStage(store: Store, profileId: string): Promise<number> {
   return Math.min(MAX_RESUME_ITERATIONS, completed + 1);
 }
 
+/**
+ * The ONE level a résumé prints for a language, preferring what the person speaks.
+ *
+ * The Review screen's language dropdown shows and writes the same field, so the
+ * label there is the label here — that is why `lib/language-levels.ts` is shared
+ * rather than each side keeping its own map.
+ */
 function formatLanguageLevel(l: Language): string | null {
   const level = l.speakingLevel ?? l.readingLevel ?? l.writingLevel;
-  if (!level) return null;
-  const labels: Record<string, string> = {
-    basico: "Básico",
-    intermedio: "Intermedio",
-    avanzado: "Avanzado",
-    nativo: "Nativo",
-  };
-  return labels[level] ?? level;
+  return level ? labelForLanguageLevel(level) : null;
 }

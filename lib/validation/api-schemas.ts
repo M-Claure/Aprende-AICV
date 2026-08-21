@@ -185,21 +185,75 @@ export const EditSkillBody = z.object({
   proficiency: z.enum(PROFICIENCY_LEVELS).nullable().optional(),
 });
 
+/*
+ * ── The four sections the funnel captures but nothing used to edit ────────────
+ *
+ * Projects, certifications, languages and achievements were WRITE-ONLY: the funnel
+ * asked about each of them, the résumé printed them, `Store` had full CRUD — and no
+ * route exposed any of it. A person who mis-answered "¿qué idiomas hablas?" could
+ * neither correct nor remove the answer, and it still reached the PDF.
+ *
+ * The `Update*` bodies below back `PATCH /api/{projects,certifications,languages,
+ * achievements}/:id`. There is deliberately no `POST`: creating an entry from the
+ * Review screen means creating a BLANK one, which needs a blankness predicate plus
+ * completeness/readiness handling per shape (see `lib/entry-blankness.ts`) — a
+ * larger change than closing the "typed it, cannot fix it" hole. These sections are
+ * still created by the funnel and the improvement loop.
+ *
+ * Bounds route through `REVIEW_FIELD_CHAR_LIMITS`, so the counter the Review screen
+ * draws under each field is the number the API enforces (pinned by
+ * tests/unit/review-field-limits.test.ts).
+ */
 export const CreateLanguageBody = z.object({
-  name: nonEmpty.max(80),
+  name: nonEmpty.max(R.languageName),
   speakingLevel: z.enum(LANGUAGE_LEVELS).nullable().optional(),
   readingLevel: z.enum(LANGUAGE_LEVELS).nullable().optional(),
   writingLevel: z.enum(LANGUAGE_LEVELS).nullable().optional(),
 });
+/**
+ * `includeOnResume` is the only thing that decides whether a language prints
+ * (`resume-generator.ts` filters on it — languages have no confirmationStatus), so
+ * it is editable: that checkbox is how someone keeps a language on file but off the
+ * page.
+ */
+export const UpdateLanguageBody = CreateLanguageBody.partial().extend({
+  includeOnResume: z.boolean().optional(),
+});
 
 export const CreateProjectBody = z.object({
-  name: nonEmpty.max(200),
+  name: nonEmpty.max(R.entryName),
   projectType: z.enum(PROJECT_TYPES).nullable().optional(),
-  organization: z.string().trim().max(200).optional(),
+  organization: z.string().trim().max(R.organization).optional(),
   description: optStr,
   responsibilities: strArray.optional(),
   outcomes: strArray.optional(),
   tools: strArray.optional(),
+});
+export const UpdateProjectBody = CreateProjectBody.partial().extend({
+  confirmationStatus: z.enum(["confirmed", "needs_review", "edited", "rejected"]).optional(),
+});
+
+/**
+ * Certifications and achievements have no `Create` body: nothing creates one over
+ * HTTP, and a schema with no caller is a promise nobody keeps.
+ *
+ * `expirationDate` and the credential id/url are absent for the same reason — the
+ * pipeline never writes them and the renderer never prints them, so a field for
+ * them would be a box that changes nothing.
+ */
+export const UpdateCertificationBody = z.object({
+  name: nonEmpty.max(R.entryName).optional(),
+  issuingOrganization: z.string().trim().max(R.organization).optional(),
+  issueDate: z.string().trim().max(R.date).optional(),
+  confirmationStatus: z.enum(["confirmed", "needs_review", "edited", "rejected"]).optional(),
+});
+
+export const UpdateAchievementBody = z.object({
+  title: nonEmpty.max(R.entryName).optional(),
+  organization: z.string().trim().max(R.organization).optional(),
+  date: z.string().trim().max(R.date).optional(),
+  description: optStr,
+  confirmationStatus: z.enum(["confirmed", "needs_review", "edited", "rejected"]).optional(),
 });
 
 export const PatchPersonalInfoBody = z.object({

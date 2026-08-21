@@ -150,6 +150,30 @@ export const api = {
     req(`/api/resume-profiles/${id}/skills`, { method: "POST", body: JSON.stringify({ names }) }),
   rejectSkill: (skillId: string) => req(`/api/skills/${skillId}/reject`, { method: "POST" }),
 
+  /*
+   * The four sections the funnel captures and the résumé prints, which nothing
+   * used to be able to change: projects, certifications, languages, achievements.
+   * Edit + delete only — they are created by the funnel, not from the Review screen
+   * (see the note above `CreateLanguageBody` in lib/validation/api-schemas.ts).
+   */
+  updateProject: (entryId: string, body: Record<string, unknown>) =>
+    req(`/api/projects/${entryId}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteProject: (entryId: string) => req(`/api/projects/${entryId}`, { method: "DELETE" }),
+
+  updateCertification: (entryId: string, body: Record<string, unknown>) =>
+    req(`/api/certifications/${entryId}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteCertification: (entryId: string) =>
+    req(`/api/certifications/${entryId}`, { method: "DELETE" }),
+
+  updateLanguage: (entryId: string, body: Record<string, unknown>) =>
+    req(`/api/languages/${entryId}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteLanguage: (entryId: string) => req(`/api/languages/${entryId}`, { method: "DELETE" }),
+
+  updateAchievement: (entryId: string, body: Record<string, unknown>) =>
+    req(`/api/achievements/${entryId}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteAchievement: (entryId: string) =>
+    req(`/api/achievements/${entryId}`, { method: "DELETE" }),
+
   setInterests: (id: string, interests: string[]) =>
     req<{ interests: string[] }>(`/api/resume-profiles/${id}/interests`, {
       method: "PATCH",

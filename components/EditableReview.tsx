@@ -2,10 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type {
+  AchievementState,
+  CertificationState,
   CompletenessReport,
   EducationEntryState,
   ExperienceEntryState,
+  LanguageState,
   PersonalInformation,
+  ProjectState,
   ResumeProfile,
   SkillState,
 } from "@/types";
@@ -13,6 +17,8 @@ import { api } from "@/lib/client/api";
 import {
   CAREER_GOAL_CHAR_LIMIT,
   ENTRY_TEXT_CHAR_LIMIT,
+  LIST_ITEM_CHAR_LIMIT,
+  LIST_MAX_ITEMS,
   REVIEW_FIELD_CHAR_LIMITS as LIMITS,
   TARGET_ROLE_CHAR_LIMIT,
 } from "@/lib/answer-limits";
@@ -29,6 +35,7 @@ import {
   yearOptions,
 } from "@/lib/experience-dates";
 import { EXPERIENCE_TYPE_OPTIONS, labelForType } from "@/lib/experience-types";
+import { LANGUAGE_LEVEL_OPTIONS } from "@/lib/language-levels";
 import { Button, Card, InstructionBanner, Spinner } from "./primitives";
 
 interface ProfileData {
@@ -37,6 +44,15 @@ interface ProfileData {
   state: {
     education: EducationEntryState[];
     experience: ExperienceEntryState[];
+    /*
+     * These four arrive in `ResumeProfileState` and always did — the funnel asks a
+     * question for each and the résumé prints them — but this screen never read
+     * them, so they could not be corrected or removed once captured.
+     */
+    projects: ProjectState[];
+    certifications: CertificationState[];
+    languages: LanguageState[];
+    achievements: AchievementState[];
     confirmedSkills: SkillState[];
     interests: string[];
     completeness: CompletenessReport;
@@ -181,6 +197,69 @@ export function EditableReview({
         ))}
       </Section>
 
+      {/*
+        Proyectos · Certificaciones · Idiomas · Logros.
+
+        Each renders ONLY when it holds something. There is no "+ Agregar" for these
+        (the funnel and the improvement loop create them), so an empty one would be a
+        heading with nothing to do under it, on a screen that is already long.
+      */}
+      {state.projects.length > 0 && (
+        <Section title="Proyectos">
+          {state.projects.map((p) => (
+            <ProjectCard
+              key={p.id}
+              entry={p}
+              disabled={saving}
+              onSave={(body) => withSave(() => api.updateProject(p.id, body))}
+              onDelete={() => withSave(() => api.deleteProject(p.id))}
+            />
+          ))}
+        </Section>
+      )}
+
+      {state.certifications.length > 0 && (
+        <Section title="Certificaciones">
+          {state.certifications.map((c) => (
+            <CertificationCard
+              key={c.id}
+              entry={c}
+              disabled={saving}
+              onSave={(body) => withSave(() => api.updateCertification(c.id, body))}
+              onDelete={() => withSave(() => api.deleteCertification(c.id))}
+            />
+          ))}
+        </Section>
+      )}
+
+      {state.languages.length > 0 && (
+        <Section title="Idiomas">
+          {state.languages.map((l) => (
+            <LanguageCard
+              key={l.id}
+              entry={l}
+              disabled={saving}
+              onSave={(body) => withSave(() => api.updateLanguage(l.id, body))}
+              onDelete={() => withSave(() => api.deleteLanguage(l.id))}
+            />
+          ))}
+        </Section>
+      )}
+
+      {state.achievements.length > 0 && (
+        <Section title="Logros">
+          {state.achievements.map((a) => (
+            <AchievementCard
+              key={a.id}
+              entry={a}
+              disabled={saving}
+              onSave={(body) => withSave(() => api.updateAchievement(a.id, body))}
+              onDelete={() => withSave(() => api.deleteAchievement(a.id))}
+            />
+          ))}
+        </Section>
+      )}
+
       {/* Habilidades */}
       <SkillsEditor
         key={`skills-${state.confirmedSkills.length}`}
@@ -249,7 +328,13 @@ function Section({
   children,
 }: {
   title: string;
-  onAdd: () => void;
+  /**
+   * Omitted for the sections the funnel owns (projects, certifications, languages,
+   * achievements): there the button would create a BLANK entry, which needs a
+   * blankness predicate and readiness handling per shape before it is safe to offer
+   * (see `lib/entry-blankness.ts`). Those sections are edit-and-delete only.
+   */
+  onAdd?: () => void;
   /** Blocks "+ Agregar" (e.g. the experience cap is reached). */
   addDisabled?: boolean;
   /** Short Spanish explanation shown when adding is blocked. */
@@ -260,14 +345,16 @@ function Section({
     <Card>
       <div className="mb-2 flex items-center justify-between">
         <h3 className="text-sm font-semibold">{title}</h3>
-        <button
-          type="button"
-          onClick={onAdd}
-          disabled={addDisabled}
-          className="text-xs font-semibold text-accent-dark hover:underline disabled:text-text-secondary disabled:no-underline disabled:opacity-50"
-        >
-          + Agregar
-        </button>
+        {onAdd && (
+          <button
+            type="button"
+            onClick={onAdd}
+            disabled={addDisabled}
+            className="text-xs font-semibold text-accent-dark hover:underline disabled:text-text-secondary disabled:no-underline disabled:opacity-50"
+          >
+            + Agregar
+          </button>
+        )}
       </div>
       {hint && <p className="mb-2 text-xs text-text-secondary">{hint}</p>}
       <div className="flex flex-col gap-3">{children}</div>
@@ -909,6 +996,382 @@ function ExperienceCard({
             isCurrent: v.isCurrent,
           })
         }
+        onDelete={onDelete}
+      />
+    </div>
+  );
+}
+
+/*
+ * ── Projects · certifications · languages · achievements ─────────────────────
+ *
+ * The funnel asks one question per section and the résumé prints all four, but
+ * nothing could edit them: no route, no card, so a mis-heard answer ("¿qué idiomas
+ * hablas?") reached the PDF with no way to fix or remove it. These four cards and
+ * the `PATCH`/`DELETE` routes behind them close that.
+ *
+ * Each is edit-and-delete: no "+ Agregar", because these entries are created by the
+ * funnel and the improvement loop, and an empty section renders nothing at all
+ * rather than a heading with no action under it.
+ *
+ * The identifying field (name / title) is the only REQUIRED one here, unlike
+ * education and experience where every field is. Two reasons: the API rejects a
+ * blank name outright (`nonEmpty`), because an entry with no name prints as an empty
+ * bullet; and the rest genuinely may not exist — plenty of certifications have no
+ * issuer to name and no date to give, and requiring those would be asking someone to
+ * invent facts, which is the one thing this product must never do.
+ */
+
+/** Comma-separated box → list, dropping blanks. Same shape as the skills box. */
+function toList(text: string): string[] {
+  return text
+    .split(/[,;\n]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/** True when a comma box has too many items, or one item is too long. */
+function listOver(text: string): boolean {
+  const items = toList(text);
+  return items.length > LIST_MAX_ITEMS || items.some((i) => i.length > LIST_ITEM_CHAR_LIMIT);
+}
+
+/**
+ * A list edited as one comma-separated line.
+ *
+ * No "used / limit" counter, for the same reason the skills and interests boxes
+ * have none: the cap is PER ITEM, so a number for the whole box would misstate it.
+ */
+function ListInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const items = toList(value);
+  const tooMany = items.length > LIST_MAX_ITEMS;
+  const tooLong = items.some((i) => i.length > LIST_ITEM_CHAR_LIMIT);
+  const bad = tooMany || tooLong;
+  return (
+    <Labeled label={label}>
+      <input
+        className={bad ? `${inputClass} border-red-500 focus:border-red-500` : inputClass}
+        aria-invalid={bad}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <span
+        className={`mt-0.5 block text-[11px] ${bad ? "font-semibold text-red-600" : "text-text-secondary"}`}
+        aria-live="polite"
+      >
+        {tooMany
+          ? `Pon ${LIST_MAX_ITEMS} como máximo. Quita ${items.length - LIST_MAX_ITEMS}.`
+          : tooLong
+            ? `Una parte pasa de ${LIST_ITEM_CHAR_LIMIT} letras. Acórtala.`
+            : "Sepáralo con comas."}
+      </span>
+    </Labeled>
+  );
+}
+
+/** Shown in the Guardar row when a required field is still empty. */
+const FILL_REQUIRED = "Llena todo lo que tiene * para poder guardar.";
+
+// ── Project card ──
+function ProjectCard({
+  entry,
+  onSave,
+  onDelete,
+  disabled,
+}: {
+  entry: ProjectState;
+  onSave: (b: Record<string, unknown>) => void;
+  onDelete: () => void;
+  disabled: boolean;
+}) {
+  const [v, setV] = useState({
+    name: entry.name ?? "",
+    organization: entry.organization ?? "",
+    description: entry.description ?? "",
+    // The three lists the model fills from the answer. They are what the résumé's
+    // project bullets are traced from, so leaving them out would leave the part
+    // that actually prints unreviewable.
+    responsibilities: entry.responsibilities.join(", "),
+    outcomes: entry.outcomes.join(", "),
+    tools: entry.tools.join(", "),
+  });
+  const set = (k: keyof typeof v) => (value: string) => setV({ ...v, [k]: value });
+  const missingName = v.name.trim() === "";
+  const tooLong =
+    overAny(
+      [v.name, LIMITS.entryName],
+      [v.organization, LIMITS.organization],
+      [v.description, ENTRY_TEXT_CHAR_LIMIT],
+    ) ||
+    listOver(v.responsibilities) ||
+    listOver(v.outcomes) ||
+    listOver(v.tools);
+  return (
+    <div className="rounded-lg border border-border p-3">
+      <div className="grid grid-cols-2 gap-2">
+        <CountedInput
+          label="Nombre del proyecto"
+          value={v.name}
+          limit={LIMITS.entryName}
+          onChange={set("name")}
+          required
+          missing={missingName}
+        />
+        <CountedInput
+          label="Organización o escuela"
+          value={v.organization}
+          limit={LIMITS.organization}
+          onChange={set("organization")}
+        />
+      </div>
+      <div className="mt-2">
+        <CountedTextarea
+          label="¿De qué se trataba?"
+          value={v.description}
+          limit={ENTRY_TEXT_CHAR_LIMIT}
+          rows={3}
+          onChange={set("description")}
+        />
+      </div>
+      <div className="mt-2 flex flex-col gap-2">
+        <ListInput label="¿Qué hiciste?" value={v.responsibilities} onChange={set("responsibilities")} />
+        <ListInput label="¿Qué lograste?" value={v.outcomes} onChange={set("outcomes")} />
+        <ListInput label="Herramientas o programas" value={v.tools} onChange={set("tools")} />
+      </div>
+      <SaveRow
+        disabled={disabled}
+        blocked={tooLong || missingName}
+        blockedMessage={tooLong ? undefined : FILL_REQUIRED}
+        onSave={() =>
+          onSave({
+            name: v.name,
+            organization: v.organization,
+            description: v.description,
+            responsibilities: toList(v.responsibilities),
+            outcomes: toList(v.outcomes),
+            tools: toList(v.tools),
+          })
+        }
+        onDelete={onDelete}
+      />
+    </div>
+  );
+}
+
+// ── Certification card ──
+function CertificationCard({
+  entry,
+  onSave,
+  onDelete,
+  disabled,
+}: {
+  entry: CertificationState;
+  onSave: (b: Record<string, unknown>) => void;
+  onDelete: () => void;
+  disabled: boolean;
+}) {
+  const [v, setV] = useState({
+    name: entry.name ?? "",
+    issuingOrganization: entry.issuingOrganization ?? "",
+    // Free text, like education's "Año de fin": the answer is kept as the person
+    // said it ("junio de 2019"), and the résumé prints that wording.
+    issueDate: entry.issueDate ?? "",
+  });
+  const set = (k: keyof typeof v) => (value: string) => setV({ ...v, [k]: value });
+  const missingName = v.name.trim() === "";
+  const tooLong = overAny(
+    [v.name, LIMITS.entryName],
+    [v.issuingOrganization, LIMITS.organization],
+    [v.issueDate, LIMITS.date],
+  );
+  return (
+    <div className="rounded-lg border border-border p-3">
+      <div className="grid grid-cols-2 gap-2">
+        <CountedInput
+          label="Nombre del certificado"
+          value={v.name}
+          limit={LIMITS.entryName}
+          onChange={set("name")}
+          required
+          missing={missingName}
+        />
+        <CountedInput
+          label="¿Quién lo dio?"
+          value={v.issuingOrganization}
+          limit={LIMITS.organization}
+          onChange={set("issuingOrganization")}
+        />
+        <CountedInput
+          label="¿Cuándo lo sacaste?"
+          value={v.issueDate}
+          limit={LIMITS.date}
+          onChange={set("issueDate")}
+        />
+      </div>
+      <SaveRow
+        disabled={disabled}
+        blocked={tooLong || missingName}
+        blockedMessage={tooLong ? undefined : FILL_REQUIRED}
+        onSave={() => onSave(v)}
+        onDelete={onDelete}
+      />
+    </div>
+  );
+}
+
+// ── Language card ──
+function LanguageCard({
+  entry,
+  onSave,
+  onDelete,
+  disabled,
+}: {
+  entry: LanguageState;
+  onSave: (b: Record<string, unknown>) => void;
+  onDelete: () => void;
+  disabled: boolean;
+}) {
+  const [v, setV] = useState({
+    name: entry.name ?? "",
+    /*
+     * ONE level, not three.
+     *
+     * The résumé prints a single level per language, preferring what the person
+     * speaks (`formatLanguageLevel`), so this shows exactly the value that will
+     * print and saves into `speakingLevel`. Reading and writing are left untouched:
+     * the funnel's model fills all three, and overwriting the other two here would
+     * quietly flatten a real distinction ("leo inglés pero no lo hablo").
+     */
+    level: entry.speakingLevel ?? entry.readingLevel ?? entry.writingLevel ?? "",
+    includeOnResume: entry.includeOnResume,
+  });
+  const missingName = v.name.trim() === "";
+  const tooLong = overAny([v.name, LIMITS.languageName]);
+  return (
+    <div className="rounded-lg border border-border p-3">
+      <div className="grid grid-cols-2 gap-2">
+        <CountedInput
+          label="Idioma"
+          value={v.name}
+          limit={LIMITS.languageName}
+          onChange={(name) => setV({ ...v, name })}
+          required
+          missing={missingName}
+        />
+        <Labeled label="¿Qué tanto lo hablas?">
+          <select
+            className={inputClass}
+            value={v.level}
+            onChange={(e) => setV({ ...v, level: e.target.value as typeof v.level })}
+          >
+            <option value="">Sin especificar</option>
+            {LANGUAGE_LEVEL_OPTIONS.map(({ level, label }) => (
+              <option key={level} value={level}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </Labeled>
+      </div>
+      {/* A language has no confirmationStatus — this checkbox alone decides whether
+          it prints, so it is the way to keep one on file but off the page. */}
+      <label className="mt-2 flex items-center gap-2 text-xs text-text-primary">
+        <input
+          type="checkbox"
+          checked={v.includeOnResume}
+          onChange={(e) => setV({ ...v, includeOnResume: e.target.checked })}
+        />
+        Mostrar este idioma en mi currículum
+      </label>
+      <SaveRow
+        disabled={disabled}
+        blocked={tooLong || missingName}
+        blockedMessage={tooLong ? undefined : FILL_REQUIRED}
+        onSave={() =>
+          onSave({
+            name: v.name,
+            speakingLevel: v.level === "" ? null : v.level,
+            includeOnResume: v.includeOnResume,
+          })
+        }
+        onDelete={onDelete}
+      />
+    </div>
+  );
+}
+
+// ── Achievement card ──
+function AchievementCard({
+  entry,
+  onSave,
+  onDelete,
+  disabled,
+}: {
+  entry: AchievementState;
+  onSave: (b: Record<string, unknown>) => void;
+  onDelete: () => void;
+  disabled: boolean;
+}) {
+  const [v, setV] = useState({
+    title: entry.title ?? "",
+    organization: entry.organization ?? "",
+    date: entry.date ?? "",
+    description: entry.description ?? "",
+  });
+  const set = (k: keyof typeof v) => (value: string) => setV({ ...v, [k]: value });
+  const missingTitle = v.title.trim() === "";
+  const tooLong = overAny(
+    [v.title, LIMITS.entryName],
+    [v.organization, LIMITS.organization],
+    [v.date, LIMITS.date],
+    [v.description, ENTRY_TEXT_CHAR_LIMIT],
+  );
+  return (
+    <div className="rounded-lg border border-border p-3">
+      <div className="grid grid-cols-2 gap-2">
+        <CountedInput
+          label="¿Qué lograste?"
+          value={v.title}
+          limit={LIMITS.entryName}
+          onChange={set("title")}
+          required
+          missing={missingTitle}
+        />
+        <CountedInput
+          label="¿Dónde fue?"
+          value={v.organization}
+          limit={LIMITS.organization}
+          onChange={set("organization")}
+        />
+        <CountedInput
+          label="¿Cuándo fue?"
+          value={v.date}
+          limit={LIMITS.date}
+          onChange={set("date")}
+        />
+      </div>
+      <div className="mt-2">
+        <CountedTextarea
+          label="Cuéntalo con tus palabras"
+          value={v.description}
+          limit={ENTRY_TEXT_CHAR_LIMIT}
+          rows={2}
+          onChange={set("description")}
+        />
+      </div>
+      <SaveRow
+        disabled={disabled}
+        blocked={tooLong || missingTitle}
+        blockedMessage={tooLong ? undefined : FILL_REQUIRED}
+        onSave={() => onSave(v)}
         onDelete={onDelete}
       />
     </div>

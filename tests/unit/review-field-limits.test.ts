@@ -15,6 +15,10 @@ import {
   CreateExperienceBody,
   PatchPersonalInfoBody,
   SetInterestsBody,
+  UpdateAchievementBody,
+  UpdateCertificationBody,
+  UpdateLanguageBody,
+  UpdateProjectBody,
 } from "@/lib/validation/api-schemas";
 
 /** `n` non-space characters, so `.trim()` in the schema chain can't shorten it. */
@@ -59,6 +63,39 @@ const cases: Case[] = [
     limit: LIMITS.date,
     schema: CreateExperienceBody,
     build: (v) => ({ experienceType: "formal_employment", startDate: v }),
+  },
+  // ── Projects / certifications / languages / achievements ──
+  { label: "project name", limit: LIMITS.entryName, schema: UpdateProjectBody, build: (v) => ({ name: v }) },
+  {
+    label: "project organization",
+    limit: LIMITS.organization,
+    schema: UpdateProjectBody,
+    build: (v) => ({ organization: v }),
+  },
+  {
+    label: "certification name",
+    limit: LIMITS.entryName,
+    schema: UpdateCertificationBody,
+    build: (v) => ({ name: v }),
+  },
+  {
+    label: "certification issueDate",
+    limit: LIMITS.date,
+    schema: UpdateCertificationBody,
+    build: (v) => ({ issueDate: v }),
+  },
+  { label: "language name", limit: LIMITS.languageName, schema: UpdateLanguageBody, build: (v) => ({ name: v }) },
+  {
+    label: "achievement title",
+    limit: LIMITS.entryName,
+    schema: UpdateAchievementBody,
+    build: (v) => ({ title: v }),
+  },
+  {
+    label: "achievement date",
+    limit: LIMITS.date,
+    schema: UpdateAchievementBody,
+    build: (v) => ({ date: v }),
   },
   // ── List items: the cap is per entry, which is what the UI reports ──
   { label: "skillName", limit: LIMITS.skillName, schema: AddSkillsBody, build: (v) => ({ names: [v] }) },

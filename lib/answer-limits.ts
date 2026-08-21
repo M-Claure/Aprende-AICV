@@ -158,6 +158,11 @@ export const REVIEW_FIELD_CHAR_LIMITS = {
   peopleServed: 200,
   /** Dates stay free text ("junio de 2019", "de marzo 2020 a la actualidad"). */
   date: 60,
+  // ── Projects / certifications / languages / achievements ──
+  /** A project's name, a certification's name, an achievement's title. */
+  entryName: 200,
+  /** Shorter than the rest because a language IS its name ("inglés"). */
+  languageName: 80,
   // ── List entries: the cap is PER ITEM, not on the whole comma-separated box ──
   skillName: 80,
   interest: 80,
