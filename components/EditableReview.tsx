@@ -660,31 +660,69 @@ function EducationCard({
     endDate: entry.endDate ?? "",
   });
   const set = (k: keyof typeof v) => (value: string) => setV({ ...v, [k]: value });
+  /*
+   * Every field on this card is required — the asterisks say so, and Guardar stays
+   * blocked until each one is filled. Same rule as `ExperienceCard`, and the same
+   * limit: it gates SAVING THIS CARD, not generating the résumé, which is still the
+   * completeness engine's server-side call (`readyToGenerate`).
+   */
+  const missing = {
+    institution: v.institution.trim() === "",
+    credential: v.credential.trim() === "",
+    fieldOfStudy: v.fieldOfStudy.trim() === "",
+    endDate: v.endDate.trim() === "",
+  };
+  const incomplete = Object.values(missing).some(Boolean);
+  const tooLong = overAny(
+    [v.institution, LIMITS.institution],
+    [v.credential, LIMITS.credential],
+    [v.fieldOfStudy, LIMITS.fieldOfStudy],
+    [v.endDate, LIMITS.date],
+  );
   return (
     <div className={blank ? blankCardClass : "rounded-lg border border-border p-3"}>
       {blank && <BlankCardNotice thing="estudio" />}
       <div className="grid grid-cols-2 gap-2">
-        <CountedInput label="Institución" value={v.institution} limit={LIMITS.institution} onChange={set("institution")} />
+        <CountedInput
+          label="Institución"
+          value={v.institution}
+          limit={LIMITS.institution}
+          onChange={set("institution")}
+          required
+          missing={missing.institution}
+        />
         <CountedInput
           label="Título / nivel"
           value={v.credential}
           limit={LIMITS.credential}
           onChange={set("credential")}
-          required={blank}
-          // Any of the fields fills the card; this is the one the funnel asks for.
-          missing={blank && v.credential.trim() === "" && v.institution.trim() === ""}
+          required
+          missing={missing.credential}
         />
-        <CountedInput label="Área de estudio" value={v.fieldOfStudy} limit={LIMITS.fieldOfStudy} onChange={set("fieldOfStudy")} />
-        <CountedInput label="Año de fin" value={v.endDate} limit={LIMITS.date} onChange={set("endDate")} />
+        <CountedInput
+          label="Área de estudio"
+          value={v.fieldOfStudy}
+          limit={LIMITS.fieldOfStudy}
+          onChange={set("fieldOfStudy")}
+          required
+          missing={missing.fieldOfStudy}
+        />
+        <CountedInput
+          label="Año de fin"
+          value={v.endDate}
+          limit={LIMITS.date}
+          onChange={set("endDate")}
+          required
+          missing={missing.endDate}
+        />
       </div>
       <SaveRow
         disabled={disabled}
-        blocked={overAny(
-          [v.institution, LIMITS.institution],
-          [v.credential, LIMITS.credential],
-          [v.fieldOfStudy, LIMITS.fieldOfStudy],
-          [v.endDate, LIMITS.date],
-        )}
+        blocked={tooLong || incomplete}
+        blockedMessage={
+          // Length wins the message: it is the one that needs an edit, not a fill-in.
+          tooLong ? undefined : "Llena todo lo que tiene * para poder guardar."
+        }
         onSave={() => onSave(v)}
         onDelete={onDelete}
       />
