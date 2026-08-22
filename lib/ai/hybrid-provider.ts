@@ -21,10 +21,18 @@ import type {
 } from "./schemas";
 
 /**
- * Funnel sections whose free-text answers are narrative/structured enough to
- * benefit from real LLM parsing (e.g. "English and Spanish, perfectly" →
- * structured languages with levels). Simple/structured sections (name, contact,
- * career goal, education, certifications) stay on the deterministic parser.
+ * Funnel sections whose free-text answers are narrative enough to be worth real LLM
+ * parsing — one sentence routinely holds several fields ("English and Spanish,
+ * perfectly" → two languages with levels; see the education note below).
+ *
+ * Everything NOT in this set stays on the deterministic parser: today that is
+ * `career_goal`, `personal_information` and `skills`, whose answers are single
+ * values a regex reads as well as a model would.
+ *
+ * Stated as "whatever is not listed here" on purpose, rather than as a second list.
+ * The inverted copy that used to live in this comment drifted: it claimed education
+ * and certifications were deterministic while both sat in the set two lines below,
+ * so the only written description of the cost split was wrong about a third of it.
  */
 const RICH_CAPTURE_SECTIONS = new Set<ResumeSection>([
   "experience",
@@ -56,9 +64,20 @@ const RICH_CAPTURE_SECTIONS = new Set<ResumeSection>([
  *  - `experience_dates` — a date, now asked once per experience. The deterministic
  *    parser and `lib/experience-dates.ts` already own every format this product
  *    accepts, and they are what orders the résumé.
+ *  - `education_dates` — the same, for the year a study finished.
  *
- * With four experiences that is five of roughly eleven experience calls removed
- * per résumé, at no cost to quality: there is no wording here to improve.
+ * In the experience section that is five of roughly eleven calls removed for a
+ * four-experience résumé (the counter, plus one date per entry), at no cost to
+ * quality: there is no wording here to improve. `education_dates` removes one more.
+ *
+ * ── The consequence to keep in mind ──────────────────────────────────────────
+ * Listing a question here makes the DETERMINISTIC parser the only thing that ever
+ * reads that answer, even with Azure configured — there is no model to fall back on
+ * and cover for it. That is what made `experience_dates` a bug: the mock wrote the
+ * whole answer to `startDate` and dropped the rest, so "de marzo 2020 a la
+ * actualidad" lost its end and the Review screen asked every person for a date they
+ * had already given. A question belongs here only if the deterministic path captures
+ * ALL of it — see `parseExperienceDateRange`.
  */
 const MECHANICAL_QUESTION_IDS = new Set([
   "experience_type_counts",

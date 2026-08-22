@@ -4,6 +4,8 @@ import { assertWithinBudget, enforceRateLimit } from "@/lib/services/usage-guard
 import { generateResume } from "@/lib/resume/resume-generator";
 import { MAX_RESUME_ITERATIONS } from "@/lib/config/limits";
 import { Errors } from "@/lib/errors";
+import { assembleProfileState } from "@/lib/profile-state";
+import { describeIncompleteEntries, incompleteEntries } from "@/lib/entry-required-fields";
 
 export const dynamic = "force-dynamic";
 // Chromium cold start + render, on top of the model call, comfortably exceeds
@@ -41,6 +43,25 @@ export async function POST(_request: Request, { params }: { params: { id: string
       throw Errors.conflict(
         `Ya mejoraste tu currículum ${MAX_RESUME_ITERATIONS} veces. Revísalo y descárgalo.`,
       );
+    }
+
+    /*
+     * The per-entry required-field rule, enforced where every client path meets it.
+     *
+     * It used to live only in `EditableReview`, which two of the three callers of
+     * this route never render — the improvement round's "Regenerar" goes straight
+     * here. So the rule held for a person's first résumé and silently stopped
+     * holding for every regeneration after it.
+     *
+     * Ordered BEHIND readiness on purpose: when the basics are missing,
+     * `generateResume` raises the canonical `missingCriticalFields` error, and
+     * refusing here first would mask it with a narrower message.
+     */
+    const state = await assembleProfileState(store, params.id);
+    if (state.completeness.readyToGenerate) {
+      const incomplete = incompleteEntries(state);
+      const problem = describeIncompleteEntries(incomplete);
+      if (problem) throw Errors.notReady(problem, { incompleteEntries: incomplete });
     }
 
     analytics.track("resume_generation_started", { resumeProfileId: params.id }, userId);

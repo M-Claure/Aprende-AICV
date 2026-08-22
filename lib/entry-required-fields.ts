@@ -9,6 +9,12 @@
  * same lesson `lib/entry-blankness.ts` records: two copies of a rule let the screen
  * say a card is fine while something else disagrees.
  *
+ * There are THREE readers, and the third is the one that makes the rule real:
+ * the card (form state), the Review screen's disabled button (persisted entries),
+ * and `POST /generate` (`describeIncompleteEntries`). The button alone was not
+ * enough — two of that route's three callers never render the Review screen, so the
+ * rule applied to a first résumé and stopped applying to every regeneration.
+ *
  * ── Two shapes, one rule ─────────────────────────────────────────────────────
  * The card holds FORM state (month and year as separate dropdowns, never null) and
  * the review screen holds a PERSISTED entry (dates as free text, everything
@@ -304,4 +310,27 @@ export function incompleteEntries(state: {
   }
 
   return out;
+}
+
+/**
+ * The Spanish sentence naming what still blocks generating, or null when nothing
+ * does — so `POST /generate` can refuse with a message the person can act on.
+ *
+ * Why the SERVER needs this at all: `incompleteEntries` gates a disabled button on
+ * the Review screen, and for a while that was the only place it was checked. But
+ * `POST /generate` is reached from three client paths — the funnel's review screen,
+ * the edit menu's "Guardar y regenerar", and the improvement round's "Regenerar" —
+ * and only the first two render that screen. So the rule applied to a person's first
+ * résumé and then quietly stopped applying to every regeneration after it, which is
+ * the same shape of bug this module was created to fix: a rule announced in one place
+ * and enforced in another.
+ *
+ * Kept as a string builder rather than a thrown error so this module stays pure and
+ * importable by the browser; the route owns the `Errors.notReady`. Entry names come
+ * from `experienceEntryName`/`educationEntryName`, never an id.
+ */
+export function describeIncompleteEntries(entries: readonly IncompleteEntry[]): string | null {
+  if (entries.length === 0) return null;
+  const parts = entries.map((e) => `${e.name} (${e.missing.join(", ")})`);
+  return `Antes de crear tu currículum, falta llenar: ${parts.join("; ")}.`;
 }

@@ -14,6 +14,7 @@ import { describe, expect, it } from "vitest";
 import {
   EDUCATION_FIELD_LABEL,
   EXPERIENCE_FIELD_LABEL,
+  describeIncompleteEntries,
   educationRequiredValues,
   experienceRequiredValues,
   incompleteEntries,
@@ -286,5 +287,37 @@ describe("incompleteEntries — what blocks continuing", () => {
         experience: [],
       }),
     ).toEqual([]);
+  });
+});
+
+describe("describeIncompleteEntries — what POST /generate refuses with", () => {
+  it("is null when nothing blocks, so the route stays out of the way", () => {
+    expect(describeIncompleteEntries([])).toBeNull();
+  });
+
+  it("names each entry and what it still needs", () => {
+    const msg = describeIncompleteEntries([
+      { id: "x1", section: "experience", name: "Cajera", missing: ["Terminó en"] },
+      { id: "e1", section: "education", name: "Secundaria", missing: ["Título / nivel u Institución"] },
+    ]);
+    expect(msg).toBe(
+      "Antes de crear tu currículum, falta llenar: Cajera (Terminó en); " +
+        "Secundaria (Título / nivel u Institución).",
+    );
+  });
+
+  it("never leaks an id into a message the person reads", () => {
+    // «Cuéntame más sobre «7f3c…»» is the failure this product already learned from,
+    // and this string is shown to the user by the improvement round's error banner.
+    const msg = describeIncompleteEntries([
+      {
+        id: "7f3c9c02-0000-4000-8000-000000000000",
+        section: "experience",
+        name: "Experiencia sin nombre",
+        missing: ["Puesto / rol u Organización"],
+      },
+    ]);
+    expect(msg).not.toContain("7f3c");
+    expect(msg).toContain("Experiencia sin nombre");
   });
 });

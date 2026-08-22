@@ -14,6 +14,7 @@ import { MockAIProvider } from "@/lib/ai/mock-provider";
 import { completenessInput, experienceState, personalState, stateFrom } from "../helpers/factories";
 import type { NormalizeAnswerParams } from "@/lib/ai/provider";
 import type { ResumeProfileState } from "@/types";
+import { RESUME_SECTIONS } from "@/types/domain";
 
 const BASE_URL = "https://example-resource.cognitiveservices.azure.com/openai/v1";
 
@@ -102,6 +103,43 @@ describe("which answers are worth paying the model for", () => {
 
     const dates = await provider.normalizeAnswer(params("experience_dates", "experience", "de 2019 a 2021"));
     expect(dates.updates.experienceEntries?.[0]?.startDate).toContain("2019");
+  });
+
+  it("pins the WHOLE section split, so the cost boundary cannot drift undocumented", async () => {
+    /*
+     * The only description of this split used to be a comment, and it went stale:
+     * it named education and certifications as deterministic while both were routed
+     * to the model, so the written cost boundary was wrong about a third of the
+     * sections. Enumerating RESUME_SECTIONS means a new section cannot be added
+     * without landing here, and moving one across the line fails this test.
+     */
+    const { provider, capableCalls } = routed();
+    for (const section of RESUME_SECTIONS) {
+      // A synthetic id, so this measures the SECTION rule and not a mechanical opt-out.
+      await provider.normalizeAnswer(params(`${section}_probe`, section, "algo que contó"));
+    }
+    const paid = RESUME_SECTIONS.filter((s) => capableCalls.includes(`${s}_probe`));
+    expect(paid).toEqual([
+      "education",
+      "experience",
+      "certifications",
+      "languages",
+      "projects",
+      "achievements",
+    ]);
+    // The complement, stated once so the count is visible: 6 paid, 4 free.
+    const free = RESUME_SECTIONS.filter((s) => !paid.includes(s));
+    expect(free).toEqual(["career_goal", "personal_information", "skills", "review"]);
+  });
+
+  it("keeps every mechanical question off the model, whatever its section", async () => {
+    // `education_dates` was the third member of MECHANICAL_QUESTION_IDS and the one
+    // the comment forgot to list.
+    const { provider, capableCalls } = routed();
+    await provider.normalizeAnswer(params("education_dates", "education", "2019"));
+    await provider.normalizeAnswer(params("experience_dates", "experience", "de 2019 a 2021"));
+    await provider.normalizeAnswer(params("experience_type_counts", "experience", '{"caregiving":1}'));
+    expect(capableCalls).toEqual([]);
   });
 
   it("never sends the cheap funnel operations to the model", async () => {

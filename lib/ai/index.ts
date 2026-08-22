@@ -58,10 +58,14 @@ export function getAIProvider(spend?: CallSpendRecorder): AIProvider {
  * suggestion, next-question planning, entry enrichment).
  *
  * - AI_PROVIDER=mock  → pure deterministic mock (offline, tests, zero tokens).
- * - AI_PROVIDER=azure → a HybridAIProvider: the model parses the narrative
- *   sections that most affect résumé quality (experience, projects, languages,
- *   achievements, interests) while cheap ops (planning, skill inference,
- *   simple-field normalization) stay on the mock to limit token spend.
+ * - AI_PROVIDER=azure → a HybridAIProvider: the model parses the narrative sections
+ *   that most affect résumé quality, while cheap ops (question planning, skill
+ *   inference, simple-field normalization) stay on the mock to limit token spend.
+ *
+ * Which sections those are is decided in ONE place — `RICH_CAPTURE_SECTIONS` in
+ * `lib/ai/hybrid-provider.ts`. Deliberately not restated here: the copy that used to
+ * be was missing education and certifications, so the two comments described
+ * different products.
  */
 export function getFunnelProvider(spend?: CallSpendRecorder): AIProvider {
   if (!spend && funnelCached) return funnelCached;
