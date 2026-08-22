@@ -35,8 +35,8 @@ import {
 } from "@/lib/entry-required-fields";
 import {
   MONTH_OPTIONS,
+  effectiveExperienceDates,
   formatExperienceDate,
-  parseExperienceDate,
   yearOptions,
 } from "@/lib/experience-dates";
 import { EXPERIENCE_TYPE_OPTIONS, labelForType } from "@/lib/experience-types";
@@ -870,8 +870,12 @@ function ExperienceCard({
    *  filled in or deleted. See `lib/entry-blankness.ts`. */
   blank?: boolean;
 }) {
-  const start = parseExperienceDate(entry.startDate);
-  const end = parseExperienceDate(entry.endDate);
+  // One reader for both dropdowns, shared with the required-field rule: the funnel
+  // stores its whole date answer on `startDate`, so reading the two fields
+  // independently showed an empty "Terminó en" (and a red asterisk) even when the
+  // person had said "a la actualidad". See `lib/experience-dates.ts`. Saving the
+  // card writes the split values back, so an entry needs this only once.
+  const { start, end, isCurrent } = effectiveExperienceDates(entry);
   const [v, setV] = useState({
     title: entry.title ?? "",
     organization: entry.organization ?? "",
@@ -885,7 +889,7 @@ function ExperienceCard({
     startYear: start.year,
     endMonth: end.month,
     endYear: end.year,
-    isCurrent: entry.isCurrent,
+    isCurrent,
   });
   /*
    * Every field on this card is required. The rule itself lives in

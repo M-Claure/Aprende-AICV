@@ -18,9 +18,11 @@ next-env.d.ts
 /playwright/.cache
 
 # env — NEVER commit secrets
+# Ignore every env file (incl. .env.production, .env.production.local) and
+# allow back only the committed template.
 .env
-.env*.local
-.env.local
+.env.*
+!.env.example
 
 # misc
 .DS_Store

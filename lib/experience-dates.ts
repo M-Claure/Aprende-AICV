@@ -85,3 +85,113 @@ export function parseExperienceDate(text: string | null | undefined): {
 
 /** Wording the renderer and the funnel both use for an ongoing experience. */
 export const CURRENT_DATE_LABEL = "Actualidad";
+
+/**
+ * "Still going on", in the words the funnel actually receives.
+ *
+ * Lives here rather than in `lib/resume/experience-order.ts` (which imports it)
+ * because it is part of reading a date, and the ordering parser is not the only
+ * thing that needs to know an answer said "a la actualidad" — so does the range
+ * split below, and through it the Review screen's "Sigo en esta experiencia".
+ */
+export const PRESENT_MARKER =
+  /\b(actualidad|actualmente|actual|presente|hoy|ahora|vigente|en\s+curso|sigo|todav[ií]a)\b/i;
+
+/** One month/year pair found in a free-text date, with where it was found. */
+interface DateToken {
+  readonly index: number;
+  readonly month: string;
+  readonly year: string;
+}
+
+/**
+ * Every month/year pair in a free-text date, in the order they appear.
+ *
+ * A bare year counts as a token with no month, but only when no month was read
+ * for it — otherwise "marzo 2020" would yield both "marzo 2020" and "2020" and a
+ * one-date answer would look like a range.
+ */
+function dateTokens(text: string): DateToken[] {
+  const lower = text.toLocaleLowerCase("es");
+  const months = MONTHS_ES as readonly string[];
+  const tokens: DateToken[] = [];
+  /** Positions of years a month was already read for. */
+  const paired = new Set<number>();
+
+  // "marzo 2020", "junio de 2018"
+  for (const m of lower.matchAll(/([a-záéíóúñ]+)\.?\s+(?:de\s+)?(19\d{2}|20\d{2}|21\d{2})\b/g)) {
+    const month = months.indexOf(m[1]!) + 1;
+    if (month === 0) continue;
+    paired.add(m.index + m[0].lastIndexOf(m[2]!));
+    tokens.push({ index: m.index, month: String(month), year: m[2]! });
+  }
+  for (const m of lower.matchAll(/\b(19\d{2}|20\d{2}|21\d{2})\b/g)) {
+    if (paired.has(m.index)) continue;
+    tokens.push({ index: m.index, month: "", year: m[1]! });
+  }
+
+  return tokens.sort((a, b) => a.index - b.index);
+}
+
+export interface ExperienceDateRange {
+  start: { month: string; year: string };
+  /** Empty when the experience is ongoing — "actualidad" IS the end. */
+  end: { month: string; year: string };
+  isCurrent: boolean;
+}
+
+const NO_DATE = { month: "", year: "" } as const;
+const EMPTY_RANGE: ExperienceDateRange = { start: NO_DATE, end: NO_DATE, isCurrent: false };
+
+/**
+ * Splits ONE free-text answer into the two ends of a range.
+ *
+ * The funnel asks for both at once — "¿de cuándo a cuándo?", example answer "de
+ * marzo 2020 a la actualidad" — so a single answer routinely carries the start,
+ * the end, and "still there". Reading only the first date out of it (which is all
+ * `parseExperienceDate` does) threw the second half away.
+ *
+ * First token is the start, LAST is the end; one token means only a start is
+ * known. Anything unparseable comes back empty rather than guessed at, and the
+ * caller keeps whatever it already had.
+ */
+export function parseExperienceDateRange(text: string | null | undefined): ExperienceDateRange {
+  if (!text) return EMPTY_RANGE;
+  const isCurrent = PRESENT_MARKER.test(text);
+  const tokens = dateTokens(text);
+  const first = tokens[0];
+  const last = tokens.length > 1 ? tokens[tokens.length - 1] : undefined;
+  return {
+    start: first ? { month: first.month, year: first.year } : NO_DATE,
+    end: isCurrent || !last ? NO_DATE : { month: last.month, year: last.year },
+    isCurrent,
+  };
+}
+
+/**
+ * The start/end/ongoing a STORED entry really has — the one reader for the Review
+ * card's dropdowns and for the required-field rule that decides whether the person
+ * may continue.
+ *
+ * Why it is not just two `parseExperienceDate` calls: the funnel writes its whole
+ * date answer to `startDate` and leaves `endDate` null (see the mock provider's
+ * `experience_dates`), so reading the fields independently reported "no end date"
+ * for every experience the funnel ever captured — while the answer sitting in
+ * `startDate` said "a la actualidad". Both callers now agree, and saving the card
+ * writes the split values back, so an entry is only ever read this way once.
+ *
+ * A stored `endDate`, or an explicit "Sigo en esta experiencia", always wins: those
+ * were chosen field by field on the Review screen and must not be second-guessed by
+ * re-reading prose.
+ */
+export function effectiveExperienceDates(e: {
+  startDate: string | null;
+  endDate: string | null;
+  isCurrent: boolean;
+}): ExperienceDateRange {
+  const range = parseExperienceDateRange(e.startDate);
+  if (e.isCurrent) return { start: range.start, end: NO_DATE, isCurrent: true };
+  const storedEnd = parseExperienceDate(e.endDate);
+  if (storedEnd.year) return { start: range.start, end: storedEnd, isCurrent: false };
+  return range;
+}

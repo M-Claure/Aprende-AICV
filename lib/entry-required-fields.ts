@@ -25,7 +25,7 @@
  * Pure module: imports only `experience-dates` (itself pure), so it runs in the
  * browser and is unit-testable with plain objects.
  */
-import { parseExperienceDate } from "./experience-dates";
+import { effectiveExperienceDates } from "./experience-dates";
 
 export type ExperienceField = "title" | "organization" | "startDate" | "endDate" | "description";
 /**
@@ -108,12 +108,19 @@ export function experienceRequiredValues(e: {
   rawDescription: string | null;
   responsibilities: readonly string[];
 }): ExperienceRequiredValues {
+  // Read through `effectiveExperienceDates`, NOT field by field: the funnel writes
+  // its whole date answer to `startDate`, so "de marzo 2020 a la actualidad" left
+  // `endDate` null and this rule reported a missing "Terminó en" for every
+  // experience the funnel had ever captured — an answer the person had already
+  // given. The Review card reads the same way, so the asterisk and the dropdown
+  // agree. See `lib/experience-dates.ts`.
+  const dates = effectiveExperienceDates(e);
   return {
     title: e.title ?? "",
     organization: e.organization ?? "",
-    startYear: parseExperienceDate(e.startDate).year,
-    endYear: parseExperienceDate(e.endDate).year,
-    isCurrent: e.isCurrent,
+    startYear: dates.start.year,
+    endYear: dates.end.year,
+    isCurrent: dates.isCurrent,
     // Same fallback the card fills its box with: an entry captured as a list of
     // responsibilities has said what the person did, even with no free text.
     description: e.rawDescription ?? e.responsibilities.join(", "),

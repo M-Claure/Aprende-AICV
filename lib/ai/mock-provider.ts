@@ -37,6 +37,7 @@ import {
 import { EXPERIENCE_TYPES, type ExperienceType } from "@/types";
 import { MAX_EXPERIENCE_ENTRIES } from "@/lib/config/limits";
 import { parsePersonalInformation } from "@/lib/personal-contact";
+import { formatExperienceDate, parseExperienceDateRange } from "@/lib/experience-dates";
 
 /**
  * Longest snippet quoted as a skill's evidence. Comfortably under
@@ -330,10 +331,38 @@ export class MockAIProvider implements AIProvider {
             ];
             summary = "Registré los resultados que mencionaste (conservando lo aproximado).";
             break;
-          case "experience_dates":
-            updates.experienceEntries = [{ startDate: raw }];
+          case "experience_dates": {
+            /*
+             * The question asks for BOTH ends at once ("de marzo 2020 a la
+             * actualidad"), so the answer is split into the structured fields the
+             * Review card and `lib/entry-required-fields.ts` read. Writing the whole
+             * answer to `startDate` — which is what this did — dropped the second
+             * half, and the Review screen then asked every person for an end date
+             * they had already given.
+             *
+             * This question is deliberately never sent to the model
+             * (`MECHANICAL_QUESTION_IDS`), so this parser is the ONLY thing that
+             * reads a funnel date: it has to keep both ends itself.
+             *
+             * Nothing parseable → the raw answer goes to `startDate` as before, which
+             * is what `experience-order.ts` already copes with. The verbatim wording
+             * is kept either way on `ConversationTurn.userAnswer`.
+             */
+            const range = parseExperienceDateRange(raw);
+            updates.experienceEntries = [
+              range.start.year
+                ? {
+                    startDate: formatExperienceDate(range.start.month, range.start.year),
+                    endDate: range.isCurrent
+                      ? ""
+                      : formatExperienceDate(range.end.month, range.end.year),
+                    isCurrent: range.isCurrent,
+                  }
+                : { startDate: raw },
+            ];
             summary = "Registré las fechas de tu experiencia.";
             break;
+          }
           default: {
             const responsibilities = splitSentences(raw);
             updates.experienceEntries = [

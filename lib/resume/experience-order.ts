@@ -13,7 +13,7 @@
  * the end, rather than being guessed at.
  */
 
-import { MONTHS_ES } from "@/lib/experience-dates";
+import { MONTHS_ES, PRESENT_MARKER } from "@/lib/experience-dates";
 
 /** The only fields ordering looks at. */
 export interface DatedExperience {
@@ -37,10 +37,6 @@ const MONTHS: Record<string, number> = {
   ...Object.fromEntries(MONTHS_ES.map((name, i) => [name, i + 1])),
   ...MONTH_VARIANTS,
 };
-
-/** "Still going on" wording, in the words the funnel actually receives. */
-const PRESENT_MARKER =
-  /\b(actualidad|actualmente|actual|presente|hoy|ahora|vigente|en\s+curso|sigo|todav[ií]a)\b/i;
 
 /** A year we are willing to believe is a date (not "20 clientes", not a phone). */
 const MIN_YEAR = 1900;
