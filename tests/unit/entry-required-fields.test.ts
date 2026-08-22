@@ -57,7 +57,29 @@ describe("missingExperienceFields", () => {
   });
 
   it("does not count whitespace as filled", () => {
-    expect(missingExperienceFields(experienceValues({ title: "   " }))).toEqual(["title"]);
+    expect(missingExperienceFields(experienceValues({ description: "   " }))).toEqual([
+      "description",
+    ]);
+    // Whitespace in BOTH name fields leaves the entry nameless.
+    expect(
+      missingExperienceFields(experienceValues({ title: "   ", organization: "  " })),
+    ).toEqual(["title", "organization"]);
+  });
+
+  it("takes a role OR an employer as the entry's name, never insisting on both", () => {
+    /*
+     * The funnel asks for neither, and plenty of real experience has no employer to
+     * name — caring for a relative, selling at a market. Requiring both stranded
+     * exactly this product's user on the last screen. See the note in
+     * `lib/entry-required-fields.ts`.
+     */
+    expect(missingExperienceFields(experienceValues({ organization: "" }))).toEqual([]);
+    expect(missingExperienceFields(experienceValues({ title: "" }))).toEqual([]);
+    // Neither one: the entry has no name, which is the thing the rule exists for.
+    expect(missingExperienceFields(experienceValues({ title: "", organization: "" }))).toEqual([
+      "title",
+      "organization",
+    ]);
   });
 
   it("stops asking for an end date when the person still works there", () => {
@@ -182,13 +204,34 @@ describe("incompleteEntries — what blocks continuing", () => {
   it("names the entry and its missing fields in Spanish", () => {
     const result = incompleteEntries({
       education: [],
-      experience: [{ ...completeExperience, organization: null, endDate: null }],
+      experience: [{ ...completeExperience, rawDescription: null, endDate: null }],
     });
     expect(result).toHaveLength(1);
     expect(result[0]!.name).toBe("Cajera");
     expect(result[0]!.missing).toEqual([
-      EXPERIENCE_FIELD_LABEL.organization,
       EXPERIENCE_FIELD_LABEL.endDate,
+      EXPERIENCE_FIELD_LABEL.description,
+    ]);
+  });
+
+  it("does not block an entry that has a role but no employer", () => {
+    // The dead end this rule used to create for caregiving and street-market work.
+    expect(
+      incompleteEntries({
+        education: [],
+        experience: [{ ...completeExperience, organization: null }],
+      }),
+    ).toEqual([]);
+  });
+
+  it("asks for the name ONCE, as a choice, when an entry has neither", () => {
+    const result = incompleteEntries({
+      education: [],
+      experience: [{ ...completeExperience, title: null, organization: null }],
+    });
+    // Not two lines: listing both would say two things are needed when one is.
+    expect(result[0]!.missing).toEqual([
+      `${EXPERIENCE_FIELD_LABEL.title} u ${EXPERIENCE_FIELD_LABEL.organization}`,
     ]);
   });
 
@@ -213,7 +256,7 @@ describe("incompleteEntries — what blocks continuing", () => {
   it("reports education and experience together, education first", () => {
     const result = incompleteEntries({
       education: [{ ...completeEducation, endDate: null }],
-      experience: [{ ...completeExperience, title: null }],
+      experience: [{ ...completeExperience, title: null, organization: null }],
     });
     expect(result.map((r) => r.section)).toEqual(["education", "experience"]);
     expect(result[0]!.missing).toEqual([EDUCATION_FIELD_LABEL.endDate]);

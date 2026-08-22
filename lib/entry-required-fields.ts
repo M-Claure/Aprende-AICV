@@ -22,6 +22,15 @@
  *   - "what you did" counts when there is free text OR any responsibility, which is
  *     exactly the fallback the card uses to fill that box in the first place.
  *
+ * ── The rule may only ask for what the funnel can produce ────────────────────
+ * Every field on this list has to be reachable by someone who answered the funnel
+ * honestly, because this is the last screen before the résumé and there is no way
+ * back past it. Two exemptions exist for that reason and neither is cosmetic:
+ * `fieldOfStudy` is absent entirely, and title/organization gate as a PAIR rather
+ * than individually. Before adding a field here, check that the catalog actually
+ * asks for it — and that a caregiver, a market vendor and someone whose highest
+ * level is primaria can all answer it truthfully.
+ *
  * Pure module: imports only `experience-dates` (itself pure), so it runs in the
  * browser and is unit-testable with plain objects.
  */
@@ -48,6 +57,28 @@ export const EXPERIENCE_FIELD_LABEL: Record<ExperienceField, string> = {
   endDate: "Terminó en",
   description: "¿Qué hacías?",
 };
+
+/**
+ * How the warning names one entry's outstanding fields.
+ *
+ * `title` and `organization` collapse into a single "o" line: they are satisfied by
+ * either one, and listing both would tell the person two things are needed when one
+ * is. Everything else is named exactly as its box is captioned.
+ */
+export function describeMissingExperienceFields(
+  fields: readonly ExperienceField[],
+): string[] {
+  const named: string[] = [];
+  // The pair is pushed together or not at all, so one check covers both.
+  if (fields.includes("title") || fields.includes("organization")) {
+    named.push(`${EXPERIENCE_FIELD_LABEL.title} u ${EXPERIENCE_FIELD_LABEL.organization}`);
+  }
+  for (const f of fields) {
+    if (f === "title" || f === "organization") continue;
+    named.push(EXPERIENCE_FIELD_LABEL[f]);
+  }
+  return named;
+}
 
 export const EDUCATION_FIELD_LABEL: Record<EducationField, string> = {
   institution: "Institución",
@@ -81,8 +112,30 @@ const blank = (v: string): boolean => v.trim().length === 0;
  */
 export function missingExperienceFields(v: ExperienceRequiredValues): ExperienceField[] {
   const missing: ExperienceField[] = [];
-  if (blank(v.title)) missing.push("title");
-  if (blank(v.organization)) missing.push("organization");
+  /*
+   * An entry needs a NAME, not both names — filling EITHER is enough, exactly the
+   * rule "correo o teléfono" follows on the same screen.
+   *
+   * Requiring both was a hard stop on this product's core user. The funnel asks for
+   * neither (`grep title lib/question-engine/question-catalog.ts` finds nothing):
+   * they exist only when the model infers them from the description, and they are
+   * explicitly null on the counter path and whenever the spend cap degrades capture
+   * to the deterministic provider. So somebody who cared for their grandmother at
+   * home had no truthful "Organización" to type and could not continue — the same
+   * argument that keeps `fieldOfStudy` off this list.
+   *
+   * What the pair still guarantees is the thing that actually matters: the entry has
+   * a human name, so the improvement loop never has to say «Cuéntame más sobre
+   * «7f3c…»». `experienceEntryName` reads the same two fields in the same order, and
+   * the résumé renderer falls back to the experience TYPE for a heading, so neither
+   * field is required to produce a good résumé.
+   *
+   * Reported together and satisfied together, which is what lets the card outline
+   * both boxes only once both are empty.
+   */
+  if (blank(v.title) && blank(v.organization)) {
+    missing.push("title", "organization");
+  }
   if (blank(v.startYear)) missing.push("startDate");
   if (!v.isCurrent && blank(v.endYear)) missing.push("endDate");
   if (blank(v.description)) missing.push("description");
@@ -213,7 +266,7 @@ export function incompleteEntries(state: {
         id: e.id,
         section: "experience",
         name: experienceEntryName(e),
-        missing: missing.map((f) => EXPERIENCE_FIELD_LABEL[f]),
+        missing: describeMissingExperienceFields(missing),
       });
     }
   }

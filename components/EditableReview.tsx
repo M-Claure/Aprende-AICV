@@ -917,6 +917,10 @@ function ExperienceCard({
     <div className={blank ? blankCardClass : "rounded-lg border border-border p-3"}>
       {blank && <BlankCardNotice thing="experiencia" />}
       <div className="grid grid-cols-2 gap-2">
+        {/* A name is enough, and plenty of real experience has no employer to name
+            (caring for a relative, selling at a market). So both carry the asterisk
+            and neither turns red until both are empty — the same rule as "correo o
+            teléfono" above. See `lib/entry-required-fields.ts`. */}
         <CountedInput
           label="Puesto / rol"
           value={v.title}
