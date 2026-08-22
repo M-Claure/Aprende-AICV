@@ -25,11 +25,18 @@
  * ── The rule may only ask for what the funnel can produce ────────────────────
  * Every field on this list has to be reachable by someone who answered the funnel
  * honestly, because this is the last screen before the résumé and there is no way
- * back past it. Two exemptions exist for that reason and neither is cosmetic:
- * `fieldOfStudy` is absent entirely, and title/organization gate as a PAIR rather
- * than individually. Before adding a field here, check that the catalog actually
- * asks for it — and that a caregiver, a market vendor and someone whose highest
- * level is primaria can all answer it truthfully.
+ * back past it. Concretely: a field belongs here only if the catalog asks for it
+ * WITHOUT offering "Omitir". That is what separates the two sections — every
+ * experience question is `allowSkip: false`, every education question is
+ * `allowSkip: true` — and it is why the exemptions below are structural rather than
+ * cosmetic: `fieldOfStudy` and education's `endDate` are absent entirely, and both
+ * "what is this entry called" pairs (title/organization, credential/institution)
+ * gate as a PAIR rather than individually.
+ *
+ * Before adding a field here, check the catalog for its `allowSkip`, and check that
+ * a caregiver, a market vendor and someone whose highest level is primaria can all
+ * answer it truthfully. If the answer is "the funnel should insist", change the
+ * catalog first and this file second — never only this file.
  *
  * Pure module: imports only `experience-dates` (itself pure), so it runs in the
  * browser and is unit-testable with plain objects.
@@ -38,16 +45,30 @@ import { effectiveExperienceDates } from "./experience-dates";
 
 export type ExperienceField = "title" | "organization" | "startDate" | "endDate" | "description";
 /**
- * Note what is NOT here: `fieldOfStudy`.
+ * Education asks for a NAME and nothing else, because a name is the only thing its
+ * funnel questions guarantee.
  *
- * Someone whose highest level is primaria or secundaria has no área de estudio, and
- * the funnel never asks for one (its education questions capture the level, the
- * institution and the year). Requiring it would leave that person unable to continue
- * unless they typed something untrue — a hard stop on exactly the user this product
- * exists for, in exchange for a field the résumé can do without. It keeps its box on
- * the Review screen, without an asterisk.
+ * Every education question in the catalog is `allowSkip: true` — `education_highest`
+ * ("No estudié"), `education_details` and `education_dates` all render an "Omitir"
+ * button. Every experience question is `allowSkip: false`. So the two sections can
+ * not have the same rule: what the funnel lets you skip, this screen must not then
+ * demand, or the product offers a choice and punishes it one screen later with no
+ * way back.
+ *
+ * Note what is NOT here:
+ *   - `fieldOfStudy` — someone whose highest level is primaria or secundaria has no
+ *     área de estudio, and nothing ever asks for one;
+ *   - `endDate` — `education_dates` is skippable and says "una fecha aproximada está
+ *     bien"; a person who finished primaria decades ago may simply not remember the
+ *     year, and a résumé prints education without one perfectly well;
+ *   - `institution` on its own — `education_details` is skippable too, so it pairs
+ *     with `credential` instead (either one names the entry).
+ *
+ * All three keep their box on the Review screen; `endDate` and `fieldOfStudy` keep it
+ * without an asterisk. To make the year mandatory, the change belongs in the CATALOG
+ * (drop its `allowSkip`) and then here — in that order, never only here.
  */
-export type EducationField = "institution" | "credential" | "endDate";
+export type EducationField = "institution" | "credential";
 
 /** Exactly the captions the cards show, so a warning names what the eye is looking for. */
 export const EXPERIENCE_FIELD_LABEL: Record<ExperienceField, string> = {
@@ -83,8 +104,19 @@ export function describeMissingExperienceFields(
 export const EDUCATION_FIELD_LABEL: Record<EducationField, string> = {
   institution: "Institución",
   credential: "Título / nivel",
-  endDate: "Año de fin",
 };
+
+/**
+ * How the warning names an education entry's outstanding fields — the same "o" line
+ * as experience, for the same reason: either field satisfies the rule, so naming
+ * both would say two things are needed when one is.
+ */
+export function describeMissingEducationFields(
+  fields: readonly EducationField[],
+): string[] {
+  if (fields.length === 0) return [];
+  return [`${EDUCATION_FIELD_LABEL.credential} u ${EDUCATION_FIELD_LABEL.institution}`];
+}
 
 export interface ExperienceRequiredValues {
   title: string;
@@ -99,7 +131,6 @@ export interface ExperienceRequiredValues {
 export interface EducationRequiredValues {
   institution: string;
   credential: string;
-  endDate: string;
 }
 
 const blank = (v: string): boolean => v.trim().length === 0;
@@ -142,13 +173,17 @@ export function missingExperienceFields(v: ExperienceRequiredValues): Experience
   return missing;
 }
 
-/** The education fields still to fill, in the order the card shows them. */
+/**
+ * The education fields still to fill, in the order the card shows them.
+ *
+ * One rule only: the entry needs a name. `credential` or `institution` — either is
+ * enough, so they are reported together and satisfied together, which is what lets
+ * the card outline both boxes only once both are empty. See the type's note above
+ * for why nothing else is required.
+ */
 export function missingEducationFields(v: EducationRequiredValues): EducationField[] {
-  const missing: EducationField[] = [];
-  if (blank(v.institution)) missing.push("institution");
-  if (blank(v.credential)) missing.push("credential");
-  if (blank(v.endDate)) missing.push("endDate");
-  return missing;
+  if (blank(v.institution) && blank(v.credential)) return ["institution", "credential"];
+  return [];
 }
 
 /** A stored entry → the values the rule reads. */
@@ -183,12 +218,10 @@ export function experienceRequiredValues(e: {
 export function educationRequiredValues(e: {
   institution: string | null;
   credential: string | null;
-  endDate: string | null;
 }): EducationRequiredValues {
   return {
     institution: e.institution ?? "",
     credential: e.credential ?? "",
-    endDate: e.endDate ?? "",
   };
 }
 
@@ -232,7 +265,6 @@ export function incompleteEntries(state: {
     id: string;
     institution: string | null;
     credential: string | null;
-    endDate: string | null;
   }[];
   experience: readonly {
     id: string;
@@ -254,7 +286,7 @@ export function incompleteEntries(state: {
         id: e.id,
         section: "education",
         name: educationEntryName(e),
-        missing: missing.map((f) => EDUCATION_FIELD_LABEL[f]),
+        missing: describeMissingEducationFields(missing),
       });
     }
   }

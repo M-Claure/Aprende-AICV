@@ -794,6 +794,10 @@ function EducationCard({
     <div className={blank ? blankCardClass : "rounded-lg border border-border p-3"}>
       {blank && <BlankCardNotice thing="estudio" />}
       <div className="grid grid-cols-2 gap-2">
+        {/* Naming the study OR the school is enough — both education questions offer
+            "Omitir", so insisting on both would punish a skip the funnel offered.
+            Both carry the asterisk and neither turns red until both are empty, the
+            same rule as "correo o teléfono". See lib/entry-required-fields.ts. */}
         <CountedInput
           label="Institución"
           value={v.institution}
@@ -820,13 +824,15 @@ function EducationCard({
           limit={LIMITS.fieldOfStudy}
           onChange={set("fieldOfStudy")}
         />
+        {/* No asterisk either: `education_dates` offers "Omitir" and accepts an
+            approximate year, so demanding one here would punish a skip the funnel
+            itself offered — and a résumé prints education without a year fine.
+            See lib/entry-required-fields.ts. */}
         <CountedInput
           label="Año de fin"
           value={v.endDate}
           limit={LIMITS.date}
           onChange={set("endDate")}
-          required
-          missing={missing.has("endDate")}
         />
       </div>
       <SaveRow

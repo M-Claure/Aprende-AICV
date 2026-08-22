@@ -34,7 +34,6 @@ const experienceValues = (over = {}) => ({
 const educationValues = (over = {}) => ({
   institution: "Colegio Benito Juárez",
   credential: "Secundaria",
-  endDate: "2018",
   ...over,
 });
 
@@ -100,12 +99,27 @@ describe("missingEducationFields", () => {
     expect(missingEducationFields(educationValues())).toEqual([]);
   });
 
-  it("reports each empty field", () => {
-    expect(missingEducationFields({ institution: "", credential: "", endDate: "" })).toEqual([
+  it("reports the name pair when the entry has neither", () => {
+    expect(missingEducationFields({ institution: "", credential: "" })).toEqual([
       "institution",
       "credential",
-      "endDate",
     ]);
+  });
+
+  it("takes the study OR the school as the name, never insisting on both", () => {
+    /*
+     * Both education questions render an "Omitir" button (`education_details`,
+     * `education_dates`), so demanding their fields here punished a skip the funnel
+     * itself offered — with the generate button disabled and no way back.
+     */
+    expect(missingEducationFields(educationValues({ institution: "" }))).toEqual([]);
+    expect(missingEducationFields(educationValues({ credential: "" }))).toEqual([]);
+  });
+
+  it("never asks for a year the funnel lets you skip", () => {
+    // `education_dates` is allowSkip: true and accepts "una fecha aproximada".
+    expect(EDUCATION_FIELD_LABEL).not.toHaveProperty("endDate");
+    expect(missingEducationFields(educationValues())).toEqual([]);
   });
 
   it("does NOT require an área de estudio", () => {
@@ -165,9 +179,9 @@ describe("reading a persisted entry", () => {
     expect(missingExperienceFields(v)).toEqual([]);
   });
 
-  it("treats every null on an untouched entry as missing", () => {
-    const v = educationRequiredValues({ institution: null, credential: null, endDate: null });
-    expect(missingEducationFields(v)).toHaveLength(3);
+  it("treats an untouched entry as unnamed", () => {
+    const v = educationRequiredValues({ institution: null, credential: null });
+    expect(missingEducationFields(v)).toEqual(["institution", "credential"]);
   });
 });
 
@@ -255,10 +269,22 @@ describe("incompleteEntries — what blocks continuing", () => {
 
   it("reports education and experience together, education first", () => {
     const result = incompleteEntries({
-      education: [{ ...completeEducation, endDate: null }],
+      education: [{ ...completeEducation, institution: null, credential: null }],
       experience: [{ ...completeExperience, title: null, organization: null }],
     });
     expect(result.map((r) => r.section)).toEqual(["education", "experience"]);
-    expect(result[0]!.missing).toEqual([EDUCATION_FIELD_LABEL.endDate]);
+    expect(result[0]!.missing).toEqual([
+      `${EDUCATION_FIELD_LABEL.credential} u ${EDUCATION_FIELD_LABEL.institution}`,
+    ]);
+  });
+
+  it("does not block a study with no school and no year", () => {
+    // The dead end this rule used to create for anyone who pressed "Omitir" twice.
+    expect(
+      incompleteEntries({
+        education: [{ ...completeEducation, institution: null }],
+        experience: [],
+      }),
+    ).toEqual([]);
   });
 });
