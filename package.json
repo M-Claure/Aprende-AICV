@@ -12,7 +12,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "db:reset": "supabase db reset"
+    "db:reset": "supabase db reset",
+    "resume:list": "vite-node --config vitest.config.ts scripts/delete-resume.ts -- --list",
+    "resume:delete": "vite-node --config vitest.config.ts scripts/delete-resume.ts --",
+    "resume:orphans": "vite-node --config vitest.config.ts scripts/delete-resume.ts -- --orphans"
   },
   "dependencies": {
     "@sparticuz/chromium": "^148.0.0",

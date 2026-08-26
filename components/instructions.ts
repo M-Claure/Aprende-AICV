@@ -97,6 +97,14 @@ const BY_QUESTION: Record<string, StepInstruction> = {
     title: "¿Dónde vives?",
     body: "Escribe la ciudad y el país donde vives. Si no quieres decirlo, puedes saltar este paso.",
   },
+  // The `skills` section banner is written for the CONFIRM screen ("Marca lo que
+  // sí sabes hacer"), but the funnel's skills step is this one: a box you type a
+  // list into. Same section, opposite instruction.
+  skills_add: {
+    icon: "⭐",
+    title: "¿Qué sabes hacer?",
+    body: "Escribe las cosas que sabes hacer, separadas por comas. Por ejemplo: trabajo en equipo, puntualidad, Excel.",
+  },
 };
 
 const FALLBACK: StepInstruction = {
