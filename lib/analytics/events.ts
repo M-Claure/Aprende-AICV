@@ -42,6 +42,12 @@ export const ANALYTICS_EVENTS = [
   "resume_pdf_skipped",
   "pdf_export_started",
   "resume_downloaded",
+  /**
+   * A user asked for the English version. The gap between this and
+   * `resume_finalized` is the uptake rate that decides whether translating on
+   * demand was the right call — see docs/english-resume.md.
+   */
+  "resume_translated",
   "funnel_abandoned",
 ] as const;
 
@@ -68,6 +74,12 @@ export const SAFE_PROPERTY_KEYS = [
   "version",
   /** Nth time this question has been answered by this profile (1-based). */
   "attemptNumber",
+  /**
+   * Which language a résumé artifact was written in ("es" | "en"). A closed set of
+   * two codes, so it carries nothing about the person — it distinguishes the
+   * Spanish PDF from its translation in the pdf_stored/pdf_skipped counts.
+   */
+  "language",
 ] as const;
 
 export type AnalyticsProps = Partial<Record<(typeof SAFE_PROPERTY_KEYS)[number], string | number | boolean>>;

@@ -203,7 +203,7 @@ the same ceiling.
 | `lib/ai/` | `AIProvider` abstraction, `MockAIProvider`, `AzureOpenAIProvider`, prompts, **Zod schemas** |
 | `lib/skills/` | evidence-backed inference + confirm/reject/edit lifecycle |
 | `lib/services/answer-pipeline.ts` | the spec §9 answer pipeline |
-| `lib/resume/` | generator · HTML renderer · PDF (two renderers: puppeteer local, `@sparticuz/chromium` serverless) · **artifact writer** (saves the PDF on every generation) · source tracing · **analyzer** (improvement loop) · **proofreader** (final spelling/grammar/format pass before finalize) |
+| `lib/resume/` | generator · HTML renderer (language-aware) · PDF (two renderers: puppeteer local, `@sparticuz/chromium` serverless) · **artifact writer** (saves the PDF on every generation, and on every translation) · source tracing · **analyzer** (improvement loop) · **proofreader** (final spelling/grammar/format pass before finalize) · **translator** (on-demand English version) |
 | `lib/rate-limit/` | pure policy (limits + keys) · `RateLimiter` iface · memory/no-op/Postgres impls |
 | `lib/spend/` | pure `checkBudget` · `SpendLedger` iface + impls · the provider's spend recorder |
 | `lib/services/usage-guard.ts` | what routes call: `enforceRateLimit` · `assertWithinBudget` · `funnelProviderForBudget` |
@@ -413,6 +413,61 @@ order to see the résumé improve (`0006_resume_pdf_storage.sql` created the buc
 - The render runs **inside the generation lock**, so concurrent requests cannot race
   to overwrite a round's stored file with different versions.
 
+## The English résumé (translation, on demand)
+
+A finished résumé can be translated into English. See `docs/english-resume.md` for
+the full cost argument; the rules that constrain code:
+
+- **It is a TRANSLATION of the finished résumé, never a second generation.** The
+  model is shown the document the person already approved — never the source data
+  it was written from — so it cannot introduce a fact the Spanish résumé does not
+  make, and every `entryId` and source trace survives. Re-generating in English
+  would produce untraced bullets and let the two documents disagree about what the
+  person did, at 5–10× the cost.
+- **It runs ONCE, when the user asks, after finalize** — not after every
+  improvement round. A translation is ~$0.017, but a résumé goes through ~6
+  generations and only a minority of users want English: translating eagerly costs
+  ~40× more (~$102 vs ~$2.55 per 1,000 users at 15% uptake) and every translation
+  before the last one is discarded work, because the user is still editing. It also
+  adds a Chromium render per round, which is what `export_pdf`'s 40/hour limit
+  exists to bound.
+- **`reasoning.effort` stays `none`.** There is no judgement to make over text that
+  is already written; reasoning bills at the $10/M output rate and is never read
+  back. The task rules ride in `stableInstructions` so the ~700-token prefix caches
+  at a tenth of the input rate.
+- **Proper nouns are never SENT.** Employers, institutions, certifying bodies and
+  the person's name are simply absent from the payload — a stronger guarantee than
+  asking a model to leave them alone, and why the prompt does not police them.
+- **The résumé's furniture is code, not prose.** Section headings, the title,
+  `<html lang>`, "Present" and the experience-type fallbacks live in `LABELS`
+  (`lib/resume/resume-renderer.ts`, threaded by a defaulted `lang` param) and cost
+  nothing. Keeping them out of the model is also what stops a heading coming back
+  missing.
+- **`SYSTEM_FACTUALITY` could not be reused** — it mandates Spanish output. It is
+  now composed from a shared `FACTUALITY_RULES` body alongside
+  `SYSTEM_FACTUALITY_TRANSLATION`, so a new prohibition applies to both
+  automatically. `SYSTEM_FACTUALITY`'s value is unchanged byte for byte.
+- **A dropped id keeps its original Spanish text.** One Spanish line in an English
+  résumé beats a blank bullet. But unlike `proofreadAndRerender`, a failed
+  translation **throws**: proofreading is cosmetic polish on a résumé the user can
+  already download, a translation is the entire thing they asked for.
+- **Staleness is explicit, never auto-refreshed.** `TranslatedResume.sourceVersion`
+  pins the `GeneratedResume.version` it came from; when the Spanish résumé moves
+  ahead the translation is kept but marked stale and the button offers to update
+  it. Refreshing automatically would reintroduce the per-round cost for anyone who
+  translated once.
+- **One PDF per language, in the same folder.** `<user_id>/<profile_id>/curriculum-en.pdf`,
+  overwritten on re-translate — a translation mirrors the *current* résumé and keeps
+  no per-round history, so `resumePdfPath` ignores `stage` for a non-`es` language.
+  Same folder because the 0006 Storage RLS policies authorize on the first path
+  segment. A profile tops out at five objects.
+- **`POST /export-pdf?lang=en` will re-render a missing PDF but will NEVER
+  translate** on a miss — that would start a paid operation from a download button,
+  behind the wrong rate limit and with no budget check.
+- **Adding a language** = a `ResumeLang` member (every `Record<ResumeLang, …>`
+  becomes a compile error until handled) + its `resume_<lang>_*` columns in a
+  migration, since `translationColumnNames` derives the names.
+
 ## PDF rendering (two browsers, one interface)
 
 `lib/resume/pdf-generator.ts` has two implementations of `PdfGenerator`, chosen by
@@ -461,7 +516,8 @@ Rules that follow:
 funnel        one row per résumé — profile columns + the eight capture sections,
               the funnel Q&A and the question state, all as JSONB, plus the
               CURRENT generated résumé (resume_id/_content/_html/_version/
-              _stage/_pdf)
+              _stage/_pdf) and its English translation, if one was ever asked
+              for (resume_en_content/_html/_pdf/_source_version/_created_at)
 iteration_1   \
 iteration_2    >  the improvement round's questions and answers, each row also
 iteration_3   /   naming the PDF that round produced (resume_pdf)
@@ -475,7 +531,9 @@ reachable only through functions granted to `service_role`. See **Usage limits**
 `0008_resume_pdf_per_stage.sql` dropped `resume_pdfs` for the fifth. The rules that
 follow:
 
-- **There is exactly ONE generated résumé per profile**, on the `funnel` row.
+- **There is exactly ONE generated résumé per profile**, on the `funnel` row —
+  plus at most one translation per language, in its own `resume_en_*` columns for
+  the same reason (see **The English résumé** above).
   `resume_pdfs` was named for its path column but was really the résumé table
   (`content` + `html` are what the CV page, preview, analyzer, proofreader and
   download all read) and was joined 1:1 in every path that touched it, so it became
@@ -543,7 +601,9 @@ is missing; improve wording without changing meaning; return valid JSON only.
 - **Unit** (`tests/unit/`, Vitest): completeness, prioritization, no-repeat/skip,
   skill status/confirm/reject, prohibited inference, readiness, generation from
   confirmed-only data, no-invented-facts, AI schema validation, analytics scrubbing,
-  brand resolution precedence, and per-brand palette completeness + WCAG contrast.
+  brand resolution precedence, per-brand palette completeness + WCAG contrast, and
+  the translation invariants (traces and `entryId`s survive, proper nouns are never
+  sent, a dropped id keeps its Spanish text, one English PDF per profile).
 - **E2E** (`tests/e2e/`, Playwright): the seven flows in spec §19, driven through
   the API against a production build in mock/memory mode.
 - Always mock the AI provider in tests (`MockAIProvider`) — it obeys the same
